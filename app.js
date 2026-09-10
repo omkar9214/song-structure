@@ -1,0 +1,961 @@
+/* ═══ Song Structure ═══════════════════════════════════════════════
+   Bars are laid out like sheet music: 4 measures to a row, sharing
+   barlines. Above each row sits a slim region strip (Reaper-style)
+   carrying the section name, and above that a marker lane for cues.
+   ================================================================= */
+
+const KEY = 'song-structure.v1';
+const PER_ROW = 4;
+const COLORS = ['#2f5fa8','#b0491e','#2b7a4b','#6b46c1','#a3226b','#8a6212','#1f6f70','#5a5f6b'];
+const KIND_ICON = { image: 'image', audio: 'audio', video: 'video', file: 'file' };
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const $  = s => document.querySelector(s);
+const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
+/* pack blocks into rows of PER_ROW bars of time, never splitting a block */
+function packRows(bars, startBar) {
+  const rows = []; let row = [], used = 0, no = startBar;
+  bars.forEach((bar, i) => {
+    const span = Math.max(1, Math.min(PER_ROW, bar.span || 1));
+    if (used + span > PER_ROW && row.length) { rows.push({ items: row, used }); row = []; used = 0; }
+    row.push({ bar, i, span, col: used, no });
+    used += span; no += span;
+  });
+  rows.push({ items: row, used });
+  return rows;
+}
+
+/* ─── state ─────────────────────────────────────────────────────── */
+let state = migrate(load());
+
+function blankSong() {
+  return { id: uid('s'), title: '', artist: '', key: '', bpm: 120, time: '4/4', sections: [], media: [], updated: Date.now() };
+}
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY));
+    if (raw && raw.songs && raw.songs.length) return raw;
+  } catch (_) {}
+  const s = blankSong();
+  return { songs: [s], currentId: s.id };
+}
+function save(quiet) {
+  song().updated = Date.now();
+  localStorage.setItem(KEY, JSON.stringify(state));
+  if (!quiet && window.Cloud) Cloud.touch(song());
+}
+
+/* the cloud layer reads and writes through these two */
+function state_songs() { return state.songs; }
+function onPulled() {
+  localStorage.setItem(KEY, JSON.stringify(state));
+  render();
+  if (!$('#drawer').hidden) renderSongs();
+}
+const song = () => state.songs.find(s => s.id === state.currentId) || state.songs[0];
+const beatsPerBar = () => parseInt(song().time.split('/')[0], 10) || 4;
+
+/* A block occupies `span` bars of time and shows `beats.length` chord fields.
+   One field by default — the chord written big across the whole bar. */
+function newBar() { return { id: uid('b'), span: 1, beats: [''], lyric: '', media: [] }; }
+const spanOf = b => Math.max(1, Math.min(PER_ROW, b.span || 1));
+const barCount = sec => sec.bars.reduce((n, b) => n + spanOf(b), 0);
+
+/* Older songs stored one slot per beat; keep the slots only where they carry
+   information, so a bar with a single chord becomes a single big field. */
+function migrate(st) {
+  st.songs.forEach(so => (so.sections || []).forEach(sec => sec.bars.forEach(b => {
+    if (b.span == null) b.span = 1;
+    delete b.split;
+    if (b.beats.filter(Boolean).length <= 1) {
+      const v = b.beats.find(Boolean) || '';
+      b.beats = b.beats[0] === v || !v ? [v] : b.beats.slice(0, b.beats.findIndex(Boolean) + 1);
+    }
+    if (!b.beats.length) b.beats = [''];
+  })));
+  return st;
+}
+function newSection(name, count, repeat, color, note) {
+  return { id: uid('x'), name, repeat: repeat || 1, color: color || COLORS[0], note: note || '',
+           collapsed: false, cues: [], media: [], bars: Array.from({ length: count }, () => newBar()) };
+}
+const findSection = id => song().sections.find(s => s.id === id);
+
+/* ─── render ────────────────────────────────────────────────────── */
+function render() {
+  const s = song();
+  $('#song-title').value  = s.title;
+  $('#song-artist').value = s.artist;
+  $('#song-key').value    = s.key;
+  $('#song-bpm').value    = s.bpm || '';
+  $('#song-time').value   = s.time;
+  document.title = (s.title || 'Song Structure') + ' — Song Structure';
+
+  renderRoadmap();
+
+  const host = $('#sections');
+  host.innerHTML = '';
+  if (!s.sections.length) {
+    const e = el('div', 'empty');
+    e.innerHTML = '<b>No regions yet.</b><br>Start with <i>Intro</i>, or jump straight to a <i>Verse</i> — add one below.';
+    host.appendChild(e);
+    return;
+  }
+  let barNo = 1;
+  s.sections.forEach((sec, i) => {
+    host.appendChild(renderSection(sec, i, barNo));
+    barNo += barCount(sec);
+  });
+}
+
+function renderRoadmap() {
+  const host = $('#roadmap');
+  host.innerHTML = '';
+  const secs = song().sections;
+  if (!secs.length) { host.appendChild(el('span', 'rm-empty', 'Add a section and the form appears here.')); return; }
+  secs.forEach(sec => {
+    const c = el('button', 'rm-chip');
+    c.style.background = `color-mix(in srgb, ${sec.color} 16%, transparent)`;
+    c.style.borderColor = sec.color;
+    c.append(sec.name || 'Untitled');
+    if ((sec.repeat || 1) > 1) { const x = el('span', 'rm-x', ` ×${sec.repeat}`); c.append(x); }
+    c.onclick = () => {
+      const node = document.getElementById(sec.id);
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      node.animate([{ outline: `2px solid ${sec.color}` }, { outline: '2px solid transparent' }], { duration: 1100 });
+    };
+    host.appendChild(c);
+  });
+}
+
+/* ─── a section = one or more 4-bar systems ─────────────────────── */
+function renderSection(sec, idx, startBar) {
+  const wrap = el('section', 'sect' + (sec.collapsed ? ' collapsed' : ''));
+  wrap.id = sec.id;
+  const total = barCount(sec);
+  const rep = (sec.repeat || 1) > 1 ? `, played ${sec.repeat} times` : '';
+  wrap.setAttribute('aria-label', `${sec.name || 'Region'}, ${total} bars${rep}`);
+  wrap.style.setProperty('--sec', sec.color);
+
+  const rows = packRows(sec.bars, startBar);
+  rows.forEach((row, ri) => {
+    const first  = ri === 0;
+    const isLast = ri === rows.length - 1;
+    const ghost  = isLast && row.used < PER_ROW;
+
+    const sys = el('div', 'system');
+    const markers = markerLane(sec, row);
+    if (markers) sys.appendChild(markers);
+
+    const box = el('div', 'rowbox');
+    box.style.gridColumn = `span ${Math.max(1, row.used)}`;
+    box.appendChild(regionStrip(sec, idx, first, rows.length > 1 ? ri + 1 : 0));
+    if (!sec.collapsed) box.appendChild(measureRow(sec, row));
+    sys.appendChild(box);
+
+    if (ghost && !sec.collapsed) {
+      const cell = el('div', 'add-cell');
+      const add = el('button', 'add-bar');
+      add.type = 'button';
+      add.appendChild(icon('plus', 14));
+      add.dataset.tip = 'Add one more bar to this region';
+      add.setAttribute('aria-label', 'Add one more bar to this region');
+      add.onclick = () => { sec.bars.push(newBar()); save(); render(); };
+      cell.appendChild(add);
+      sys.appendChild(cell);
+    }
+    wrap.appendChild(sys);
+  });
+
+  dropZone(wrap, f => addMedia(sec, f));
+  return wrap;
+}
+
+/* marker lane — cues sitting above the block that contains their bar */
+function markerLane(sec, row) {
+  if (!row.items.length) return null;
+  const from = row.items[0].no, to = row.items[row.items.length - 1].no + row.items[row.items.length - 1].span - 1;
+  const secStart = row.items[0].no - row.items[0].i === 0 ? 0 : 0;  /* cue.bar is 1-based within the region */
+  const base = row.items[0].no - cueOffset(sec, row.items[0].i);
+  const inRow = (sec.cues || []).filter(c => {
+    const abs = base + c.bar - 1;
+    return abs >= from && abs <= to;
+  });
+  if (!inRow.length) return null;
+
+  const lane = el('div', 'markers');
+  const slots = [];
+  for (let i = 0; i < PER_ROW; i++) { const sl = el('div', 'mk-slot'); sl.style.gridColumn = String(i + 1); slots.push(sl); lane.appendChild(sl); }
+  inRow.forEach(c => {
+    const abs = base + c.bar - 1;
+    const item = row.items.find(it => abs >= it.no && abs < it.no + it.span) || row.items[0];
+    const m = el('button', 'marker');
+    m.type = 'button';
+    m.dataset.tip = `${c.text} — bar ${c.bar} of this region. Click to edit, \u2325-click to remove.`;
+    m.append(c.icon || '\ud83d\udccc', el('span', null, c.text));
+    m.onclick = e => {
+      if (e.altKey) { sec.cues.splice(sec.cues.indexOf(c), 1); save(); render(); }
+      else cueDialog(sec, c);
+    };
+    slots[Math.min(PER_ROW - 1, item.col)].appendChild(m);
+  });
+  return lane;
+}
+/* bars of time before block index i, so cue numbers stay 1-based per region */
+function cueOffset(sec, i) { return sec.bars.slice(0, i).reduce((n, b) => n + spanOf(b), 0); }
+
+/* the slim region rectangle across the top of the box */
+function regionStrip(sec, idx, first, contPart) {
+  const r = el('div', 'region');
+
+  const caret = el('button', 'r-caret');
+  caret.type = 'button';
+  caret.appendChild(icon(sec.collapsed ? 'caretRight' : 'caretDown', 13));
+  caret.dataset.tip = sec.collapsed ? 'Show this region\u2019s bars' : 'Collapse to just the region strip';
+  caret.setAttribute('aria-label', caret.dataset.tip);
+  caret.setAttribute('aria-expanded', String(!sec.collapsed));
+  caret.onclick = () => { sec.collapsed = !sec.collapsed; save(); render(); };
+  if (first) r.appendChild(caret);
+  else {
+    const cont = el('span', 'r-caret r-cont', '\u21b3');
+    cont.dataset.tip = `Still ${sec.name || 'the same region'} — it is longer than four bars, so it carries on to this line`;
+    r.appendChild(cont);
+  }
+
+  const mid = el('div', 'r-mid');
+  const name = el('input', 'r-name');
+  name.value = sec.name; name.spellcheck = false; name.placeholder = 'region name';
+  name.setAttribute('aria-label', 'Region name');
+  name.readOnly = !first;
+  const fit = () => name.size = Math.max(5, (name.value || name.placeholder).length);
+  fit();
+  name.oninput = () => { sec.name = name.value; fit(); save(); renderRoadmap(); };
+  mid.appendChild(name);
+
+  if (first && repeatEdit === sec.id) {
+    mid.appendChild(repeatField(sec));
+  } else if (first && (sec.repeat || 1) > 1) {
+    const x = el('button', 'r-rep', '×' + sec.repeat);
+    x.type = 'button';
+    x.dataset.tip = `Played ${sec.repeat} times — click to change`;
+    x.onclick = () => setRepeat(sec);
+    mid.appendChild(x);
+  }
+  if (first && sec.note) mid.appendChild(el('span', 'r-note', sec.note));
+  if (!first && contPart) mid.appendChild(el('span', 'r-part', 'cont.'));
+  r.appendChild(mid);
+
+  const right = el('div', 'r-right');
+  if (first) {
+    (sec.media || []).forEach(m => right.appendChild(mediaIcon(m, sec)));
+    const tools = el('div', 'r-tools');
+    tools.append(
+      tool('repeat', 'Set repeat count — how many times this region is played', () => setRepeat(sec)),
+      tool('pin', 'Add a pointer above the bars (vocal starts, drums enter…)', () => cueDialog(sec)),
+      tool('clip', 'Attach an image, audio or video to this region', () => pickMedia(f => addMedia(sec, f))),
+      tool('plus', 'Add one more bar to this region', () => { sec.bars.push(newBar()); save(); render(); }),
+      tool('paint', 'Change the region colour', () => { sec.color = COLORS[(COLORS.indexOf(sec.color) + 1) % COLORS.length]; save(); render(); }),
+      tool('up', 'Move this region earlier in the song', () => moveSection(idx, -1)),
+      tool('down', 'Move this region later in the song', () => moveSection(idx, 1)),
+      tool('copy', 'Duplicate this region with all its bars', () => {
+        const copy = JSON.parse(JSON.stringify(sec));
+        copy.id = uid('x'); copy.bars.forEach(b => b.id = uid('b')); copy.cues.forEach(c => c.id = uid('c'));
+        song().sections.splice(idx + 1, 0, copy); save(); render();
+      }),
+      tool('trash', 'Delete this region', async () => {
+        if (!await ask(`"${sec.name}" and its ${barCount(sec)} bars will be removed.`)) return;
+        song().sections.splice(idx, 1); save(); render();
+      }, 'danger')
+    );
+    right.appendChild(tools);
+  }
+  r.appendChild(right);
+  return r;
+}
+let repeatEdit = null;                       /* id of the region whose ×N is being typed */
+function setRepeat(sec) { repeatEdit = sec.id; render(); }
+function repeatField(sec) {
+  const inp = el('input', 'r-rep r-rep-in');
+  inp.type = 'number'; inp.min = 1; inp.max = 64; inp.value = sec.repeat || 1;
+  inp.setAttribute('aria-label', `How many times ${sec.name} is played`);
+  const commit = () => {
+    sec.repeat = Math.min(64, Math.max(1, parseInt(inp.value, 10) || 1));
+    repeatEdit = null; save(); render();
+  };
+  inp.onkeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { e.preventDefault(); repeatEdit = null; render(); }
+  };
+  inp.onblur = commit;
+  setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  return inp;
+}
+
+/* one row of measures, sharing barlines inside the box */
+function measureRow(sec, row) {
+  const line = el('div', 'measures');
+  line.style.gridTemplateColumns = `repeat(${Math.max(1, row.used)},1fr)`;
+  row.items.forEach((it, k) => line.appendChild(measure(sec, it, k === 0)));
+  return line;
+}
+
+/* ─── one block ─────────────────────────────────────────────────────── */
+function measure(sec, it, firstInRow) {
+  const { bar, i, span, no } = it;
+  const m = el('div', 'measure');
+  m.dataset.sec = sec.id; m.dataset.idx = i; m.dataset.no = no;
+  m.style.gridColumn = `span ${span}`;
+
+  const label = span > 1 ? `${no}\u2013${no + span - 1}` : String(no);
+  const name  = span > 1 ? `bars ${no}\u2013${no + span - 1}` : `bar ${no}`;
+  const num = el('span', 'm-num', label);
+  num.dataset.tip = span > 1
+    ? `One block of ${span * 4} beats, bars ${no}\u2013${no + span - 1}`
+    : `Bar ${no}`;
+
+  /* remove the barline on this block's left edge → join it to the previous one */
+  if (!firstInRow && i > 0) {
+    const prev = sec.bars[i - 1];
+    if (spanOf(prev) + span <= PER_ROW) {
+      const b = el('button', 'barline-btn');
+      b.type = 'button';
+      b.appendChild(icon('x', 11));
+      b.dataset.tip = `Remove this barline \u2014 join bars ${no - spanOf(prev)}\u2013${no + span - 1} into one ${(spanOf(prev) + span) * 4}-beat block`;
+      b.setAttribute('aria-label', b.dataset.tip);
+      b.onclick = () => mergeBars(sec, i - 1);
+      m.appendChild(b);
+    }
+  }
+  /* put a barline back inside a merged block */
+  if (span > 1) {
+    const b = el('button', 'barline-add');
+    b.type = 'button';
+    b.appendChild(icon('plus', 11));
+    b.style.left = `calc(${100 / span}% - 9px)`;
+    b.dataset.tip = 'Put the barline back \u2014 split this into separate bars';
+    b.setAttribute('aria-label', b.dataset.tip);
+    b.onclick = () => splitBar(sec, i);
+    m.appendChild(b);
+  }
+
+  const fields = bar.beats.length;
+  const chords = el('div', 'm-chords' + (fields > 1 ? ' split' : ''));
+  chords.style.setProperty('--beats', fields);
+  bar.beats.forEach((v, bi) => chords.appendChild(beatInput(bar, bi, m, chords, fields === 1)));
+
+  const tools = el('div', 'm-tools');
+  tools.append(
+    moveHandle(sec, i, m, name),
+    tool('columns', `${fields} chord field${fields === 1 ? '' : 's'} in this block \u2014 click for ${nextFields(fields, span)}`,
+      () => setFields(bar, nextFields(fields, span))),
+    tool('copy', 'Duplicate this block', () => {
+      const copy = JSON.parse(JSON.stringify(bar)); copy.id = uid('b');
+      sec.bars.splice(i + 1, 0, copy); save(); render();
+    }),
+    tool('clip', 'Attach an image, audio or video to this block', () => pickMedia(f => addMedia(bar, f))),
+    tool('trash', span > 1 ? 'Delete this block' : 'Delete this bar', () => { sec.bars.splice(i, 1); save(); render(); }, 'danger')
+  );
+
+  const lyric = el('input', 'm-lyric');
+  lyric.value = bar.lyric || ''; lyric.placeholder = '\u2026'; lyric.spellcheck = false;
+  lyric.setAttribute('aria-label', `Lyric or cue under bar ${no}`);
+  lyric.dataset.tip = 'A lyric or short cue for this bar';
+  lyric.oninput = () => { bar.lyric = lyric.value; save(); };
+  if (bar.lyric) lyric.classList.add('has');
+
+  const icons = el('div', 'm-icons');
+  (bar.media || []).forEach(md => icons.appendChild(mediaIcon(md, bar)));
+
+  m.append(num, tools, chords, lyric, icons);
+
+  return m;
+}
+
+/* ─── moving a block ────────────────────────────────────────────
+   One pointer-driven drag that works with a mouse and a finger (HTML5
+   drag-and-drop never fires on touch), plus arrow keys for the keyboard. */
+let drag = null;
+function moveHandle(sec, i, m, name) {
+  const h = el('button', 'm-grip');
+  h.type = 'button';
+  h.appendChild(icon('grip', 13));
+  h.dataset.tip = `Move ${name} — drag it anywhere, or press \u2190 \u2192`;
+  h.setAttribute('aria-label', `Move ${name}`);
+  h.onpointerdown = e => beginDrag(e, sec, i, m);
+  h.onkeydown = e => {
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); nudge(sec, i, -1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); nudge(sec, i, 1); }
+  };
+  h.onclick = e => e.preventDefault();
+  return h;
+}
+
+function beginDrag(e, sec, i, m) {
+  if (e.button != null && e.button > 0) return;
+  e.preventDefault();
+  Tip.hide();
+  const chord = sec.bars[i].beats.find(Boolean) || m.dataset.no;
+  const ghost = el('div', 'drag-ghost', chord);
+  document.body.appendChild(ghost);
+  drag = { secId: sec.id, i, m, ghost, target: null };
+  m.classList.add('dragging');
+  document.body.classList.add('is-dragging');
+  moveGhost(e);
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', endDrag, { once: true });
+  window.addEventListener('pointercancel', endDrag, { once: true });
+}
+function moveGhost(e) {
+  drag.ghost.style.left = e.clientX + 'px';
+  drag.ghost.style.top  = e.clientY + 'px';
+}
+function clearMarks() {
+  document.querySelectorAll('.drop-before,.drop-after')
+    .forEach(n => n.classList.remove('drop-before', 'drop-after'));
+}
+function onDragMove(e) {
+  if (!drag) return;
+  e.preventDefault();
+  moveGhost(e);
+  drag.ghost.classList.add('on');
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = under && under.closest('.measure');
+  clearMarks();
+  drag.target = null;
+  if (cell && cell !== drag.m) {
+    const r = cell.getBoundingClientRect();
+    const after = e.clientX > r.left + r.width / 2;
+    cell.classList.add(after ? 'drop-after' : 'drop-before');
+    drag.target = { sec: cell.dataset.sec, idx: parseInt(cell.dataset.idx, 10), after };
+  }
+}
+function endDrag() {
+  if (!drag) return;
+  window.removeEventListener('pointermove', onDragMove);
+  drag.ghost.remove();
+  drag.m.classList.remove('dragging');
+  document.body.classList.remove('is-dragging');
+  clearMarks();
+  const t = drag.target, fromId = drag.secId, fromIdx = drag.i;
+  drag = null;
+  if (!t) return;
+  const from = findSection(fromId), to = findSection(t.sec);
+  if (!from || !to) return;
+  const [block] = from.bars.splice(fromIdx, 1);
+  let at = t.idx + (t.after ? 1 : 0);
+  if (from === to && fromIdx < at) at--;
+  to.bars.splice(at, 0, block);
+  save(); render();
+}
+
+/* one step left or right, hopping into the neighbouring region at the edge */
+function nudge(sec, i, dir) {
+  const secs = song().sections, si = secs.indexOf(sec);
+  const to = i + dir;
+  if (to >= 0 && to < sec.bars.length) {
+    [sec.bars[i], sec.bars[to]] = [sec.bars[to], sec.bars[i]];
+  } else {
+    const nb = secs[si + dir];
+    if (!nb) return;
+    const [block] = sec.bars.splice(i, 1);
+    dir < 0 ? nb.bars.push(block) : nb.bars.unshift(block);
+  }
+  save(); render();
+  const sel = dir < 0
+    ? `#${(secs[si + dir] || sec).id} .m-grip`
+    : `#${(secs[si + dir] || sec).id} .m-grip`;
+  requestAnimationFrame(() => {
+    const grips = [...document.querySelectorAll('.m-grip')];
+    const moved = document.querySelector('.measure.just-moved .m-grip');
+    (moved || grips[0]) && (moved || grips[0]).focus();
+  });
+}
+
+/* how many chord fields the next click gives you */
+function nextFields(n, span) {
+  const opts = span > 1 ? [1, 2, 3, 4, 6, 8] : [1, 2, 3, 4];
+  return opts[(opts.indexOf(n) + 1) % opts.length] || 1;
+}
+function setFields(bar, n) {
+  const kept = bar.beats.filter(Boolean);
+  const next = Array(n).fill('');
+  if (n >= bar.beats.length) bar.beats.forEach((v, k) => next[k] = v);
+  else kept.slice(0, n).forEach((v, k) => next[k] = v);
+  bar.beats = next;
+  save(); render();
+}
+function mergeBars(sec, i) {
+  const a = sec.bars[i], b = sec.bars[i + 1];
+  if (!a || !b) return;
+  a.span = spanOf(a) + spanOf(b);
+  const joined = [...a.beats, ...b.beats];
+  while (joined.length > 1 && !joined[joined.length - 1]) joined.pop();
+  a.beats = joined;
+  a.lyric = [a.lyric, b.lyric].filter(Boolean).join(' / ');
+  a.media = [...(a.media || []), ...(b.media || [])];
+  sec.bars.splice(i + 1, 1);
+  save(); render();
+}
+function splitBar(sec, i) {
+  const a = sec.bars[i], span = spanOf(a);
+  if (span < 2) return;
+  const b = newBar();
+  b.span = span - 1;
+  const half = Math.ceil(a.beats.length / span);
+  b.beats = a.beats.slice(half).filter((_, k, arr) => true);
+  if (!b.beats.length) b.beats = [''];
+  a.beats = a.beats.slice(0, half);
+  if (!a.beats.length) a.beats = [''];
+  a.span = 1;
+  sec.bars.splice(i + 1, 0, b);
+  save(); render();
+}
+
+function beatInput(bar, bi, m, chords, solo) {
+  const inp = el('input', 'beat' + (solo ? ' solo' : ''));
+  inp.value = bar.beats[bi] || '';
+  inp.spellcheck = false;
+  const where = solo ? `bar ${m.dataset.no}` : `bar ${m.dataset.no}, field ${bi + 1}`;
+  inp.setAttribute('aria-label', `Chord for ${where}`);
+  inp.oninput = () => { bar.beats[bi] = inp.value; save(); };
+  inp.onkeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); step(m, 1); }
+    else if (e.key === 'Backspace' && !inp.value && bi > 0 && !solo) { e.preventDefault(); chords.children[bi - 1].focus(); }
+    else if (e.key === 'ArrowRight' && inp.selectionStart === inp.value.length) {
+      e.preventDefault();
+      (!solo && bi < bar.beats.length - 1) ? chords.children[bi + 1].focus() : step(m, 1);
+    } else if (e.key === 'ArrowLeft' && inp.selectionStart === 0) {
+      e.preventDefault();
+      (!solo && bi > 0) ? chords.children[bi - 1].focus() : step(m, -1);
+    }
+  };
+  return inp;
+}
+
+function step(node, dir) {
+  const all = [...document.querySelectorAll('.measure:not(.blank):not(.ghost)')];
+  const nxt = all[all.indexOf(node) + dir];
+  if (nxt) nxt.querySelector('.beat')[dir > 0 ? 'focus' : 'focus']();
+}
+
+function tool(name, tip, fn, extra) {
+  const b = el('button', 'ibtn' + (extra ? ' ' + extra : ''));
+  b.type = 'button';
+  b.appendChild(icon(name));
+  b.dataset.tip = tip;
+  b.setAttribute('aria-label', tip);          /* icon-only: needs its own name */
+  b.onclick = e => { e.stopPropagation(); fn(e); };
+  return b;
+}
+function moveSection(i, d) {
+  const a = song().sections, j = i + d;
+  if (j < 0 || j >= a.length) return;
+  [a[i], a[j]] = [a[j], a[i]]; save(); render();
+}
+
+/* ─── media ─────────────────────────────────────────────────────── */
+function mediaIcon(m, owner) {
+  const b = el('button', 'micon ' + m.kind);
+  b.type = 'button';
+  b.appendChild(icon(KIND_ICON[m.kind] || 'file', 12));
+  const verb = m.kind === 'image' ? 'View' : m.kind === 'file' ? 'Open' : 'Play';
+  b.dataset.tip = `${verb} ${m.name}`;
+  b.setAttribute('aria-label', b.dataset.tip);
+  b.onclick = e => { e.stopPropagation(); openViewer(m, owner); };
+  return b;
+}
+function pickMedia(cb) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*,audio/*,video/*'; inp.multiple = true;
+  inp.onchange = () => [...inp.files].forEach(cb);
+  inp.click();
+}
+async function addMedia(owner, file) {
+  const ref = await Media.put(file);
+  (owner.media = owner.media || []).push(ref);
+  save(); render();
+  toast(`Attached ${ref.name}`);
+  if (Cloud.ready && await Cloud.upload(ref)) save();
+}
+async function openViewer(m, owner) {
+  let url = await Media.url(m.id);
+  if (!url && m.remote && Cloud.ready) {           /* attached on another device */
+    toast(`Fetching ${m.name}\u2026`);
+    const blob = await Cloud.fetchMedia(m);
+    if (blob) url = URL.createObjectURL(blob);
+  }
+  if (!url) { toast('That file is not on this device'); return; }
+  const body = $('#viewer-body');
+  body.innerHTML = '';
+  $('#viewer-name').textContent = m.name;
+  let node;
+  if (m.kind === 'image') { node = el('img'); node.src = url; }
+  else if (m.kind === 'audio') { node = el('audio'); node.controls = true; node.autoplay = true; node.src = url; }
+  else if (m.kind === 'video') { node = el('video'); node.controls = true; node.src = url; }
+  else { node = el('a', null, 'Download ' + m.name); node.href = url; node.download = m.name; }
+  body.appendChild(node);
+  const rm = $('#viewer-remove');
+  rm.onclick = async () => {
+    if (!await ask(`${m.name} will be removed from this song.`, 'Remove')) return;
+    await Media.del(m.id);
+    if (m.remote && Cloud.ready) await Cloud.removeMedia(m.id);
+    owner.media.splice(owner.media.findIndex(x => x.id === m.id), 1);
+    save(); render(); closeViewer();
+  };
+  $('#viewer').hidden = false;
+}
+function closeViewer() { $('#viewer').hidden = true; $('#viewer-body').innerHTML = ''; }
+function dropZone(node, cb) {
+  node.ondragover = e => {
+    if (![...(e.dataTransfer.types || [])].includes('Files')) return;
+    e.preventDefault(); node.classList.add('drop-hint');
+  };
+  node.ondragleave = () => node.classList.remove('drop-hint');
+  node.ondrop = e => {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault(); node.classList.remove('drop-hint');
+    [...e.dataTransfer.files].forEach(cb);
+  };
+}
+
+/* ─── dialogs ───────────────────────────────────────────────────── */
+let pendingColor = COLORS[0];
+function buildSwatches() {
+  const host = $('#sec-swatches');
+  host.innerHTML = '';
+  COLORS.forEach(c => {
+    const b = el('button', 'sw' + (c === pendingColor ? ' on' : ''));
+    b.type = 'button'; b.style.background = c;
+    b.onclick = () => { pendingColor = c; buildSwatches(); };
+    host.appendChild(b);
+  });
+}
+function sectionDialog() {
+  const s = song();
+  const used = s.sections.map(x => x.name);
+  const guess = !used.length ? 'Intro'
+    : used.filter(n => /verse/i.test(n)).length && !used.filter(n => /chorus/i.test(n)).length ? 'Chorus'
+    : 'Verse ' + (used.filter(n => /verse/i.test(n)).length + 1);
+  pendingColor = COLORS[s.sections.length % COLORS.length];
+  buildSwatches();
+  $('#sec-name').value = guess;
+  $('#sec-bars').value = 8;
+  $('#sec-repeat').value = 1;
+  $('#sec-note').value = '';
+  const d = $('#dlg-section');
+  d.onclose = () => {
+    if (d.returnValue !== 'ok') return;
+    const name = $('#sec-name').value.trim() || 'Section';
+    const bars = Math.min(128, Math.max(1, parseInt($('#sec-bars').value, 10) || 8));
+    const rep  = Math.min(64, Math.max(1, parseInt($('#sec-repeat').value, 10) || 1));
+    s.sections.push(newSection(name, bars, rep, pendingColor, $('#sec-note').value.trim()));
+    save(); render();
+    document.getElementById(s.sections[s.sections.length - 1].id).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  d.returnValue = '';                       /* Esc must not re-use the previous 'ok' */
+  d.showModal();
+  $('#sec-name').select();
+  setTimeout(() => $('#sec-name').select(), 30);
+}
+function cueDialog(sec, existing) {
+  const d = $('#dlg-cue');
+  $('#cue-text').value = existing ? existing.text : '';
+  $('#cue-icon').value = existing ? existing.icon : '🎤';
+  $('#cue-bar').value  = existing ? existing.bar : 1;
+  $('#cue-bar').max = barCount(sec) || 1;
+  d.onclose = () => {
+    if (d.returnValue !== 'ok') return;
+    const text = $('#cue-text').value.trim();
+    if (!text) return;
+    const data = { text, icon: $('#cue-icon').value,
+                   bar: Math.min(barCount(sec) || 1, Math.max(1, parseInt($('#cue-bar').value, 10) || 1)) };
+    if (existing) Object.assign(existing, data);
+    else (sec.cues = sec.cues || []).push({ id: uid('c'), ...data });
+    sec.cues.sort((a, b) => a.bar - b.bar);
+    save(); render();
+  };
+  d.returnValue = '';
+  d.showModal();
+  $('#cue-text').select();
+  setTimeout(() => $('#cue-text').select(), 30);
+}
+
+/* ─── sync UI ───────────────────────────────────────────────────── */
+const CLOUD_TEXT = {
+  off:     ['Not configured', 'No project is configured, so everything stays on this device.'],
+  nolib:   ['Offline',        'The Supabase library could not load — check your connection.'],
+  out:     ['Sign in',        'Sign in and your songs, mp3s and chord diagrams sync to your account, so they are on every device.'],
+  syncing: ['Syncing…',       'Talking to the server.'],
+  pending: ['Saving…',        'Changes queued — they go up in a moment.'],
+  ok:      ['Synced',         'Everything on this device is on the server.'],
+  error:   ['Sync failed',    'Something went wrong. Your work is safe on this device; try again.']
+};
+
+function cloudDialog(awaitingCode) {
+  const d = $('#dlg-cloud');
+  msg('');
+  paintCloud(awaitingCode);
+  d.returnValue = '';
+  if (!d.open) d.showModal();
+}
+
+function msg(text, kind) {
+  const p = $('#cloud-msg');
+  p.textContent = text;
+  p.className = 'dlg-msg' + (kind ? ' ' + kind : '');
+  p.hidden = !text;
+}
+
+/* Send the link. The dialog stays open — closing and reopening it lost your
+   place and looked like a glitch. */
+$('#cloud-go').onclick = async () => {
+  if (Cloud.user) {
+    msg('Syncing…');
+    try { await Cloud.syncAll(); const n = await Cloud.backfill(); msg(n ? `Synced, ${n} file${n === 1 ? '' : 's'} uploaded` : 'Everything is up to date', 'good'); }
+    catch (e) { msg(e.message || 'Sync failed', 'bad'); }
+    return;
+  }
+  const email = $('#cloud-email').value.trim();
+  if (!email) { $('#cloud-email').focus(); return msg('Enter your email first', 'bad'); }
+  const btn = $('#cloud-go');
+  btn.disabled = true; msg('Sending…');
+  try {
+    await Cloud.signIn(email);
+    localStorage.setItem('song-structure.email', email);
+    msg('Link sent — open it in this browser and you are done.', 'good');
+    paintCloud(true);
+  } catch (e) {
+    msg(e.message || 'Could not send the link', 'bad');
+  } finally {
+    setTimeout(() => btn.disabled = false, 20000);   /* matches the server-side wait */
+  }
+};
+
+$('#cloud-verify').onclick = async () => {
+  const email = $('#cloud-email').value.trim(), code = $('#cloud-code').value.trim();
+  if (!email || !code) return msg('Enter your email and the code', 'bad');
+  msg('Checking…');
+  try {
+    await Cloud.verifyCode(email, code);
+    msg('Signed in', 'good');
+    paintCloud();
+    setTimeout(() => $('#dlg-cloud').close(), 700);
+  } catch (e) { msg(e.message || 'That code did not work', 'bad'); }
+};
+
+$('#cloud-signout').onclick = async () => {
+  await Cloud.signOut();
+  msg('Signed out — your songs stay on this device', 'good');
+  paintCloud();
+};
+
+function paintCloud(awaitingCode) {
+  const [label, note] = CLOUD_TEXT[Cloud.state] || CLOUD_TEXT.out;
+  const signedIn = !!Cloud.user;
+  $('#cloud-code-field').hidden = signedIn || !awaitingCode;
+  $('#cloud-verify').hidden = signedIn || !awaitingCode;
+  if (!signedIn && !$('#cloud-email').value)
+    $('#cloud-email').value = localStorage.getItem('song-structure.email') || '';
+  $('#cloud-title').textContent = signedIn ? 'Sync' : 'Sign in to sync';
+  $('#cloud-state').textContent = note;
+  $('#cloud-account').hidden = !signedIn;
+  if (signedIn) $('#cloud-who').textContent = Cloud.user.email;
+  $('#cloud-email-field').hidden = signedIn;
+  $('#cloud-go').textContent = signedIn ? 'Sync now' : 'Send me a link';
+  $('#cloud-go').hidden = Cloud.state === 'off' || Cloud.state === 'nolib';
+}
+
+/* The sign-in link opens in a new tab, and two tabs can both hold the chart.
+   Follow whatever the other tab writes instead of quietly diverging. */
+window.addEventListener('storage', e => {
+  if (!e.key) return;
+  if (e.key === KEY && e.newValue) {
+    try {
+      const next = migrate(JSON.parse(e.newValue));
+      const keep = state.currentId;
+      state = next;
+      if (state.songs.some(s => s.id === keep)) state.currentId = keep;
+      render();
+      if (!$('#drawer').hidden) renderSongs();
+    } catch (_) {}
+  }
+  if (/auth-token/.test(e.key)) Cloud.refresh();
+});
+
+Cloud.onError(m => toast(m));
+Cloud.on((st, user) => {
+  const btn = $('#btn-cloud');
+  if (!btn) return;
+  const [label] = CLOUD_TEXT[st] || CLOUD_TEXT.out;
+  btn.querySelector('.lbl').textContent = user ? label : (st === 'off' || st === 'nolib' ? label : 'Sign in');
+  btn.dataset.state = st;
+  btn.dataset.tip = user
+    ? `${label} — signed in as ${user.email}`
+    : 'Sign in to sync songs and attachments across your devices';
+  btn.setAttribute('aria-label', btn.dataset.tip);
+  if (!$('#dlg-cloud').open) return;
+  paintCloud();
+});
+
+/* ─── confirm ───────────────────────────────────────────────────
+   prompt()/confirm() are blocked in some embedded browsers and look
+   nothing like the app, so both are replaced with real dialogs. */
+function ask(body, okLabel = 'Delete') {
+  return new Promise(res => {
+    const d = $('#dlg-confirm');
+    $('#confirm-body').textContent = body;
+    $('#confirm-ok').textContent = okLabel;
+    d.onclose = () => res(d.returnValue === 'ok');
+    d.returnValue = '';
+    d.showModal();
+  });
+}
+
+/* ─── songs ─────────────────────────────────────────────────────── */
+function renderSongs() {
+  const host = $('#song-list');
+  host.innerHTML = '';
+  state.songs.slice().sort((a, b) => b.updated - a.updated).forEach(s => {
+    const row = el('div', 'song-row' + (s.id === state.currentId ? ' on' : ''));
+    const main = el('div', 'sr-main');
+    main.append(el('div', 'sr-title', s.title || 'Untitled'));
+    const bars = s.sections.reduce((n, x) => n + barCount(x), 0);
+    main.append(el('div', 'sr-sub', `${s.sections.length} regions · ${bars} bars${s.key ? ' · ' + s.key : ''}`));
+    row.appendChild(main);
+    row.onclick = () => { state.currentId = s.id; save(); render(); renderSongs(); closeDrawer(); };
+    row.appendChild(tool('trash', 'Delete this song', async () => {
+      if (!await ask(`"${s.title || 'Untitled'}" will be removed, along with anything attached to it.`)) return;
+      state.songs = state.songs.filter(x => x.id !== s.id);
+      if (!state.songs.length) state.songs = [blankSong()];
+      if (state.currentId === s.id) state.currentId = state.songs[0].id;
+      if (Cloud.ready) Cloud.remove(s.id);
+      save(); render(); renderSongs();
+    }, 'danger'));
+    host.appendChild(row);
+  });
+}
+const openDrawer  = () => { renderSongs(); $('#drawer').hidden = false; };
+const closeDrawer = () => { $('#drawer').hidden = true; };
+
+/* ─── PDF ───────────────────────────────────────────────────────
+   The print stylesheet already lays the chart out cleanly, so "Save as PDF"
+   in the browser's print dialog is the export — no library, no server,
+   and the page you see is the page you get. */
+function exportPDF() {
+  const t = song().title || 'Song structure';
+  const prev = document.title;
+  document.title = t;                       /* becomes the PDF's filename */
+  Tip.hide();
+  const restore = () => { document.title = prev; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
+  window.print();
+}
+
+/* ─── backup / restore (JSON, from the Songs drawer) ────────────── */
+async function exportSong() {
+  const s = JSON.parse(JSON.stringify(song()));
+  const blobs = {};
+  const collect = async owner => {
+    for (const m of owner.media || []) { const d = await Media.toDataURL(m.id); if (d) blobs[m.id] = d; }
+  };
+  await collect(s);
+  for (const sec of s.sections) { await collect(sec); for (const b of sec.bars) await collect(b); }
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ format: 'song-structure/1', song: s, media: blobs }, null, 2)],
+    { type: 'application/json' }));
+  const a = el('a'); a.href = url;
+  a.download = (s.title || 'song').replace(/[^\w\- ]+/g, '') + '.songstructure.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Exported (media included)');
+}
+async function importSong(file) {
+  const data = JSON.parse(await file.text());
+  const s = data.song || data;
+  if (!s.sections) { toast('Not a song file'); return; }
+  s.id = uid('s'); s.updated = Date.now();
+  for (const [id, rec] of Object.entries(data.media || {})) await Media.fromDataURL(id, rec);
+  state.songs.push(s); state.currentId = s.id;
+  save(); render();
+  toast(`Imported "${s.title || 'Untitled'}"`);
+}
+
+/* ─── misc ──────────────────────────────────────────────────────── */
+let toastT;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200);
+}
+
+/* ─── wiring ────────────────────────────────────────────────────── */
+$('#song-title').oninput  = e => { song().title = e.target.value; save(); document.title = (e.target.value || 'Song Structure') + ' — Song Structure'; };
+$('#song-artist').oninput = e => { song().artist = e.target.value; save(); };
+$('#song-key').oninput    = e => { song().key = e.target.value; save(); };
+$('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); };
+$('#song-time').onchange  = e => { song().time = e.target.value; save(); };
+
+$('#btn-add-section').onclick = sectionDialog;
+$('#btn-songs').onclick    = openDrawer;
+$('#drawer-close').onclick = closeDrawer;
+$('#drawer-scrim').onclick = closeDrawer;
+$('#btn-new-song').onclick = () => { const s = blankSong(); state.songs.push(s); state.currentId = s.id; save(); render(); $('#song-title').focus(); };
+$('#btn-pdf').onclick      = exportPDF;
+$('#btn-cloud').onclick    = cloudDialog;
+$('#btn-account').onclick  = () => { closeDrawer(); cloudDialog(); };
+$('#btn-backup').onclick   = exportSong;
+$('#btn-restore').onclick  = () => $('#import-file').click();
+$('#import-file').onchange = e => { if (e.target.files[0]) importSong(e.target.files[0]); e.target.value = ''; };
+$('#viewer-close').onclick = closeViewer;
+$('#viewer').onclick = e => { if (e.target.id === 'viewer') closeViewer(); };
+
+/* ─── tooltips ──────────────────────────────────────────────────
+   Anything with data-tip gets one: 400ms on hover, instant on keyboard
+   focus, dismissed by Escape (WCAG 1.4.13). Icon-only controls also carry
+   an aria-label, so the tooltip is a convenience, never the only label. */
+const Tip = (() => {
+  let node, timer, current;
+  const build = () => {
+    if (node) return node;
+    node = el('div', 'tip'); node.setAttribute('role', 'tooltip'); node.hidden = true;
+    document.body.appendChild(node);
+    return node;
+  };
+  function show(t) {
+    const text = t.dataset.tip; if (!text) return;
+    build(); node.textContent = text; node.hidden = false;
+    const r = t.getBoundingClientRect(), n = node.getBoundingClientRect();
+    let y = r.top - n.height - 8, below = false;
+    if (y < 6) { y = r.bottom + 8; below = true; }
+    const x = Math.max(8, Math.min(r.left + r.width / 2 - n.width / 2, innerWidth - n.width - 8));
+    node.style.left = Math.round(x) + 'px';
+    node.style.top  = Math.round(y) + 'px';
+    node.classList.toggle('below', below);
+    node.classList.add('on');
+    current = t;
+  }
+  function hide() { clearTimeout(timer); if (node) { node.classList.remove('on'); node.hidden = true; } current = null; }
+  document.addEventListener('mouseover', e => {
+    const t = e.target.closest('[data-tip]');
+    if (!t) return hide();
+    if (t === current) return;
+    clearTimeout(timer); timer = setTimeout(() => show(t), 400);
+  });
+  document.addEventListener('mouseleave', hide, true);
+  document.addEventListener('focusin',  e => { const t = e.target.closest('[data-tip]'); if (t) show(t); });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('mousedown', hide);
+  window.addEventListener('scroll', hide, true);
+  return { hide };
+})();
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { Tip.hide(); closeDrawer(); if (!$('#viewer').hidden) closeViewer(); }
+  const typing = /input|textarea|select/i.test(document.activeElement.tagName);
+  if (!typing && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); sectionDialog(); }
+});
+
+/* icons declared in the markup */
+document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.icon, 15)));
+$('#logo').appendChild(icon('music', 17));
+
+render();
+Cloud.init();

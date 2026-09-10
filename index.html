@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Song Structure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to the chart</a>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" id="logo"></span>
+    <span>Song Structure</span>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-songs" class="btn ghost" data-icon="list" data-tip="All your songs" aria-label="Songs"><span class="lbl">Songs</span></button>
+    <button id="btn-new-song" class="btn ghost" data-icon="filePlus" data-tip="Start a new, empty song" aria-label="New song"><span class="lbl">New</span></button>
+    <button id="btn-cloud" class="btn ghost cloud-btn" data-tip="Sync songs and attachments to your account" aria-label="Cloud sync"><span class="dot"></span><span class="lbl">Sync</span></button>
+    <button id="btn-pdf" class="btn ghost" data-icon="print" data-tip="Save this chart as a PDF (choose “Save as PDF” in the print dialog)" aria-label="Save as PDF"><span class="lbl">PDF</span></button>
+    <input type="file" id="import-file" accept="application/json" hidden>
+  </div>
+</header>
+
+<main class="sheet" id="main-content" aria-label="Song chart">
+  <h1 class="sr-only" id="doc-h1">Song structure chart</h1>
+
+  <section class="song-head">
+    <input class="title-in" id="song-title" placeholder="Song title" spellcheck="false" aria-label="Song title">
+    <input class="artist-in" id="song-artist" placeholder="Artist / notes" spellcheck="false">
+    <div class="meta-row">
+      <label class="meta" data-tip="The key the song is in — for your own reference"><span>Key</span><input id="song-key" placeholder="C" spellcheck="false"></label>
+      <label class="meta" data-tip="Tempo. Drives the running-time estimate"><span>BPM</span><input id="song-bpm" type="number" min="20" max="300" placeholder="120"></label>
+      <label class="meta" data-tip="Time signature — sets how many beats a bar holds"><span>Time</span>
+        <select id="song-time">
+          <option value="4/4">4/4</option>
+          <option value="3/4">3/4</option>
+          <option value="6/8">6/8</option>
+          <option value="5/4">5/4</option>
+          <option value="7/8">7/8</option>
+          <option value="2/4">2/4</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="roadmap-wrap">
+    <div class="roadmap-label">Roadmap</div>
+    <div class="roadmap" id="roadmap"></div>
+  </section>
+
+  <div id="sections"></div>
+
+  <div class="add-section-row">
+    <button class="btn primary big" id="btn-add-section" data-icon="plus" data-tip="Name it, say how many bars, set a repeat — press N any time">Add region</button>
+    <span class="hint">A region is a named group of bars — Intro, Verse, Chorus…</span>
+  </div>
+
+</main>
+
+<!-- ── Add / edit section dialog ─────────────────────────────── -->
+<dialog id="dlg-section" aria-labelledby="dlg-section-title">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-section-title">Add region</h2>
+
+    <label class="field">
+      <span>Region name <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
+      <input id="sec-name" list="section-presets" placeholder="Chorus" required spellcheck="false">
+      <datalist id="section-presets">
+        <option>Intro</option><option>Verse</option><option>Verse 1</option><option>Verse 2</option>
+        <option>Pre-Chorus</option><option>Chorus</option><option>Post-Chorus</option>
+        <option>Bridge</option><option>Middle 8</option><option>Solo</option><option>Instrumental</option>
+        <option>Breakdown</option><option>Drop</option><option>Build</option><option>Interlude</option>
+        <option>Refrain</option><option>Hook</option><option>Outro</option><option>Tag</option><option>Ending</option>
+      </datalist>
+    </label>
+
+    <div class="field-row">
+      <label class="field">
+        <span>How many bars? <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
+        <input id="sec-bars" type="number" min="1" max="128" value="8" required>
+      </label>
+      <label class="field">
+        <span>Repeat (×)</span>
+        <input id="sec-repeat" type="number" min="1" max="64" value="1" required>
+      </label>
+    </div>
+
+    <label class="field">
+      <span>Colour</span>
+      <div class="swatches" id="sec-swatches"></div>
+    </label>
+
+    <label class="field">
+      <span>Note (optional)</span>
+      <input id="sec-note" placeholder="e.g. half-time feel, no cymbals" spellcheck="false">
+    </label>
+
+    <menu class="dlg-actions">
+      <button value="cancel" class="btn ghost">Cancel</button>
+      <button value="ok" class="btn primary" id="sec-submit">Add region</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ── Cue dialog ────────────────────────────────────────────── -->
+<dialog id="dlg-cue" aria-labelledby="dlg-cue-title">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-cue-title">Pointer / cue</h2>
+    <label class="field">
+      <span>Text <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
+      <input id="cue-text" list="cue-presets" placeholder="Vocal starts here" required spellcheck="false">
+      <datalist id="cue-presets">
+        <option>Vocal starts here</option><option>Drums enter</option><option>Bass enters</option>
+        <option>Full band</option><option>Guitar solo</option><option>Everyone out</option>
+        <option>Build</option><option>Drop</option><option>Half-time</option><option>Double-time</option>
+        <option>Stop / hit</option><option>Ritardando</option><option>Get quiet</option><option>Big finish</option>
+        <option>Capo here</option><option>Key change</option>
+      </datalist>
+    </label>
+    <div class="field-row">
+      <label class="field">
+        <span>Icon</span>
+        <select id="cue-icon">
+          <option value="🎤">🎤 vocal</option><option value="🥁">🥁 drums</option>
+          <option value="🎸">🎸 guitar</option><option value="🎹">🎹 keys</option>
+          <option value="🎻">🎻 strings</option><option value="🔊">🔊 dynamics</option>
+          <option value="⚡">⚡ hit / stop</option><option value="📌">📌 general</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>On bar #</span>
+        <input id="cue-bar" type="number" min="1" value="1">
+      </label>
+    </div>
+    <menu class="dlg-actions">
+      <button value="cancel" class="btn ghost">Cancel</button>
+      <button value="ok" class="btn primary">Save cue</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ── Account / sync ───────────────────────────────────────── -->
+<dialog id="dlg-cloud" aria-labelledby="cloud-title">
+  <form method="dialog" class="dlg" id="cloud-form">
+    <h2 id="cloud-title">Sync</h2>
+    <div class="account-row" id="cloud-account" hidden>
+      <div class="acct">
+        <span class="acct-email" id="cloud-who"></span>
+        <span class="acct-sub">Signed in on this device</span>
+      </div>
+      <button type="button" class="btn danger-outline" id="cloud-signout">Sign out</button>
+    </div>
+
+    <p id="cloud-state" class="dlg-note"></p>
+    <p id="cloud-msg" class="dlg-msg" hidden></p>
+
+    <label class="field" id="cloud-email-field">
+      <span>Email <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
+      <input id="cloud-email" type="email" autocomplete="email" placeholder="you@example.com" spellcheck="false">
+      <small class="dlg-help">We email you a sign-in link. No password to remember.</small>
+    </label>
+
+    <label class="field" id="cloud-code-field" hidden>
+      <span>Or paste the code from that email</span>
+      <input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" spellcheck="false">
+      <small class="dlg-help">Only if the link will not open in this browser — it needs <code>{{ .Token }}</code> in your Supabase email template.</small>
+    </label>
+
+    <menu class="dlg-actions">
+      <button value="cancel" class="btn ghost">Close</button>
+      <button type="button" class="btn ghost" id="cloud-verify" hidden>Use code</button>
+      <button type="button" class="btn primary" id="cloud-go">Send me a link</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ── Confirm ──────────────────────────────────────────────── -->
+<dialog id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+  <form method="dialog" class="dlg confirm">
+    <h2 id="confirm-title">Are you sure?</h2>
+    <p id="confirm-body"></p>
+    <menu class="dlg-actions">
+      <button value="cancel" class="btn ghost">Cancel</button>
+      <button value="ok" class="btn danger-btn" id="confirm-ok">Delete</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ── Songs drawer ──────────────────────────────────────────── -->
+<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Your songs" hidden>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <h2>Songs</h2>
+      <button class="btn ghost" id="drawer-close" data-icon="x" aria-label="Close"></button>
+    </div>
+    <div id="song-list" class="song-list"></div>
+    <div class="drawer-foot">
+      <button id="btn-backup" class="btn ghost" data-icon="export" data-tip="Save every part of this song — media included — as a backup file">Back up</button>
+      <button id="btn-restore" class="btn ghost" data-icon="import" data-tip="Load a song from a backup file">Restore</button>
+      <button id="btn-account" class="btn ghost" data-icon="list" data-tip="Account and sync">Account</button>
+    </div>
+  </div>
+  <div class="drawer-scrim" id="drawer-scrim"></div>
+</div>
+
+<!-- ── Media viewer ──────────────────────────────────────────── -->
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Attachment" hidden>
+  <div class="viewer-inner">
+    <div class="viewer-head">
+      <span id="viewer-name"></span>
+      <span style="flex:1"></span>
+      <button class="btn ghost" id="viewer-remove">Remove</button>
+      <button class="btn ghost" id="viewer-close" data-icon="x" aria-label="Close"></button>
+    </div>
+    <div class="viewer-body" id="viewer-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="icons.js"></script>
+<script src="db.js"></script>
+<script src="cloud.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
