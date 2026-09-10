@@ -1337,10 +1337,16 @@ async function importSong(file) {
 
 /* ─── misc ──────────────────────────────────────────────────────── */
 let toastT;
-function toast(msg) {
+function toast(msg, action) {
   const t = $('#toast');
   t.textContent = msg; t.hidden = false;
-  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200);
+  if (action) {                              /* "…sign in" is only useful if you can act on it */
+    const b = el('button', 'toast-do', action.label);
+    b.type = 'button';
+    b.onclick = () => { t.hidden = true; action.run(); };
+    t.appendChild(b);
+  }
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, action ? 6000 : 2200);
 }
 
 /* ─── Save ──────────────────────────────────────────────────────
@@ -1348,11 +1354,27 @@ function toast(msg) {
    "push it to my account now" — the one button people look for before
    they close a laptop or walk on stage. */
 let savingNow = false;
+/* Supabase restores the session from storage asynchronously. Pressing Save in
+   the first second after a load must not report "not signed in" when there is
+   a session sitting in storage waiting to be read. */
+function settled() {
+  if (!window.Cloud) return Promise.resolve();
+  const stored = Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k));
+  if (!stored) return Promise.resolve();
+  return new Promise(res => {
+    const t0 = Date.now();
+    const tick = () => {
+      if (Cloud.user || Cloud.state === 'off' || Cloud.state === 'nolib' || Date.now() - t0 > 2500) return res();
+      setTimeout(tick, 120);
+    };
+    tick();
+  });
+}
 async function saveNow() {
   if (savingNow) return;
   save();                                    /* flush the current song and queue it */
   const btn = $('#btn-save'), lbl = btn.querySelector('.lbl');
-  const done = text => {
+  const done = (text, action) => {
     const svg = btn.querySelector('svg');
     if (svg) svg.replaceWith(icon('check', 15));
     lbl.textContent = 'Saved';
@@ -1363,13 +1385,17 @@ async function saveNow() {
       lbl.textContent = 'Save';
       btn.classList.remove('saved');
     }, 1600);
-    if (text) toast(text);
+    if (text) toast(text, action);
   };
 
+  if (!window.Cloud || !Cloud.user) { lbl.textContent = 'Saving…'; await settled(); }
   if (!window.Cloud || !Cloud.user) {
-    done(Cloud && (Cloud.state === 'off' || Cloud.state === 'nolib')
-      ? 'Saved on this device'
-      : 'Saved on this device — sign in to have it on every device');
+    const dead = Cloud && (Cloud.state === 'off' || Cloud.state === 'nolib');
+    const offline = !navigator.onLine;
+    done(offline ? 'Saved on this device — it goes up when you have signal'
+       : dead     ? 'Saved on this device'
+       : 'Saved on this device — sign in to have it on every device',
+       offline || dead ? null : { label: 'Sign in', run: cloudDialog });
     return;
   }
   savingNow = true; btn.disabled = true; lbl.textContent = 'Saving…';
