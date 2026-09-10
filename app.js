@@ -270,6 +270,16 @@ function renderRoadmap() {
   });
 }
 
+function addBarButton(sec) {
+  const add = el('button', 'add-bar');
+  add.type = 'button';
+  add.appendChild(icon('plus', 14));
+  add.dataset.tip = 'Add one more bar to this region';
+  add.setAttribute('aria-label', 'Add one more bar to this region');
+  add.onclick = () => { sec.bars.push(newBar()); save(); render(); };
+  return add;
+}
+
 /* ─── a section = one or more 4-bar systems ─────────────────────── */
 function renderSection(sec, idx, startBar) {
   const wrap = el('section', 'sect' + (sec.collapsed ? ' collapsed' : ''));
@@ -280,6 +290,7 @@ function renderSection(sec, idx, startBar) {
   wrap.style.setProperty('--sec', sec.color);
 
   const rows = packRows(sec.bars, startBar);
+  let placedAdd = false;
   rows.forEach((row, ri) => {
     const first  = ri === 0;
     const isLast = ri === rows.length - 1;
@@ -297,17 +308,23 @@ function renderSection(sec, idx, startBar) {
 
     if (ghost && !sec.collapsed) {
       const cell = el('div', 'add-cell');
-      const add = el('button', 'add-bar');
-      add.type = 'button';
-      add.appendChild(icon('plus', 14));
-      add.dataset.tip = 'Add one more bar to this region';
-      add.setAttribute('aria-label', 'Add one more bar to this region');
-      add.onclick = () => { sec.bars.push(newBar()); save(); render(); };
-      cell.appendChild(add);
+      cell.appendChild(addBarButton(sec));
       sys.appendChild(cell);
+      placedAdd = true;
     }
     wrap.appendChild(sys);
   });
+
+  /* the last row filled all four columns, so the button has no spare column to sit in.
+     Give it a row of its own — otherwise a region whose bars land on a multiple of 4
+     (a fresh 8-bar section, say) has no visible way to grow. */
+  if (!sec.collapsed && !placedAdd) {
+    const sys = el('div', 'system');
+    const cell = el('div', 'add-cell solo');
+    cell.appendChild(addBarButton(sec));
+    sys.appendChild(cell);
+    wrap.appendChild(sys);
+  }
 
   dropZone(wrap, f => addMedia(sec, f));
   return wrap;
