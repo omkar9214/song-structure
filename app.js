@@ -88,7 +88,7 @@ function render() {
   $('#song-key').value    = s.key;
   $('#song-bpm').value    = s.bpm || '';
   $('#song-time').value   = s.time;
-  document.title = (s.title || 'Song Structure') + ' — Song Structure';
+  document.title = s.title ? `${s.title} — Song Structure` : 'Song Structure';
 
   renderRoadmap();
 
@@ -887,7 +887,10 @@ function toast(msg) {
 }
 
 /* ─── wiring ────────────────────────────────────────────────────── */
-$('#song-title').oninput  = e => { song().title = e.target.value; save(); document.title = (e.target.value || 'Song Structure') + ' — Song Structure'; };
+$('#song-title').oninput  = e => {
+  song().title = e.target.value; save();
+  document.title = e.target.value ? `${e.target.value} — Song Structure` : 'Song Structure';
+};
 $('#song-artist').oninput = e => { song().artist = e.target.value; save(); };
 $('#song-key').oninput    = e => { song().key = e.target.value; save(); };
 $('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); };

@@ -6,6 +6,8 @@ media attached where you need reminding.
 
 No install, no build, no account. Everything stays in your browser.
 
+**Live at [omkar9214.github.io/song-structure](https://omkar9214.github.io/song-structure/)**
+
 ## Run it
 
 Double-click `index.html`, or serve it:
@@ -118,8 +120,9 @@ red failed. A failure never loses work — the local copy is always the source o
 1. Supabase dashboard → **SQL Editor** → paste `supabase-setup.sql` → Run. That creates the
    `songs` table, the `media` bucket, and row-level-security policies that restrict every row and
    every file to the account that owns it.
-2. **Authentication → URL Configuration** → add your app's URLs to *Redirect URLs*, so the
-   sign-in link is allowed to come back to it.
+2. **Authentication → URL Configuration** → add both app URLs to *Redirect URLs*, so the
+   sign-in link is allowed to come back:
+   `https://omkar9214.github.io/song-structure/**` and `http://localhost:8712/**`.
 
 Both values in `config.js` are publishable on purpose — the key grants nothing that the policies
 do not allow.
