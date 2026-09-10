@@ -238,3 +238,8 @@ const Cloud = (() => {
     get ready() { return !!(sb && user); }
   };
 })();
+
+/* A top-level `const` is a script-scoped binding, not a property of window —
+   so every `window.Cloud` test elsewhere was quietly false, and save() never
+   queued anything for sync. Publish it explicitly. */
+window.Cloud = Cloud;
