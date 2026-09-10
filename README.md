@@ -83,6 +83,10 @@ land. It is one pointer-driven drag, so it works with a mouse *and* with a finge
 drag-and-drop never fires on touch). With the keyboard, focus the grip and press `←` / `→` to
 step the block one place at a time; at the edge of a region it hops into the next one.
 
+A chord too long for its bar shrinks to fit — `Abmaj7#11/Eb` in a quarter-width field drops as
+far as 10px rather than spilling over the barline. Short chords keep their full size, and the
+sizes are recalculated when the window changes width.
+
 Under each bar is a faint line for a lyric or a short cue; it stays visible once you type in
 it.
 

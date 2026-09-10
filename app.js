@@ -106,6 +106,7 @@ function render() {
     host.appendChild(renderSection(sec, i, barNo));
     barNo += barCount(sec);
   });
+  fitAllChords();
 }
 
 /* ─── the song's own recording ──────────────────────────────────
@@ -645,13 +646,49 @@ function splitBar(sec, i) {
   save(); render();
 }
 
+/* ─── fitting long chords ───────────────────────────────────────
+   "Cmaj7#11/G" must not spill out of its bar. Measure the text and shrink
+   the type until it fits, down to a floor where it is still readable.
+   The base size comes from the stylesheet, so the breakpoints still rule. */
+const fitCtx = document.createElement('canvas').getContext('2d');
+const fitBase = new Map();
+
+function baseSizeFor(inp) {
+  const key = inp.className;
+  if (!fitBase.has(key)) {
+    const prev = inp.style.fontSize;
+    inp.style.fontSize = '';
+    const cs = getComputedStyle(inp);
+    fitBase.set(key, { size: parseFloat(cs.fontSize), weight: cs.fontWeight, family: cs.fontFamily });
+    inp.style.fontSize = prev;
+  }
+  return fitBase.get(key);
+}
+
+function fitChord(inp) {
+  const v = inp.value;
+  const b = baseSizeFor(inp);
+  if (!v) { inp.style.fontSize = ''; return; }
+  const avail = inp.clientWidth - 6;
+  if (avail <= 0) return;
+  fitCtx.font = `${b.weight} ${b.size}px ${b.family}`;
+  const w = fitCtx.measureText(v).width;
+  inp.style.fontSize = w > avail
+    ? Math.max(10, b.size * avail / w).toFixed(1) + 'px'
+    : '';
+}
+function fitAllChords() {
+  fitBase.clear();                       /* breakpoint may have changed */
+  document.querySelectorAll('.beat').forEach(fitChord);
+}
+
 function beatInput(bar, bi, m, chords, solo) {
   const inp = el('input', 'beat' + (solo ? ' solo' : ''));
   inp.value = bar.beats[bi] || '';
   inp.spellcheck = false;
   const where = solo ? `bar ${m.dataset.no}` : `bar ${m.dataset.no}, field ${bi + 1}`;
   inp.setAttribute('aria-label', `Chord for ${where}`);
-  inp.oninput = () => { bar.beats[bi] = inp.value; save(); };
+  inp.oninput = () => { bar.beats[bi] = inp.value; fitChord(inp); save(); };
   inp.onkeydown = e => {
     if (e.key === 'Enter') { e.preventDefault(); step(m, 1); }
     else if (e.key === 'Backspace' && !inp.value && bi > 0 && !solo) { e.preventDefault(); chords.children[bi - 1].focus(); }
@@ -1128,6 +1165,12 @@ function paintCloud(awaitingCode) {
 
 /* The sign-in link opens in a new tab, and two tabs can both hold the chart.
    Follow whatever the other tab writes instead of quietly diverging. */
+let fitTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(fitAllChords, 120);
+});
+
 window.addEventListener('storage', e => {
   if (!e.key) return;
   if (e.key === KEY && e.newValue) {
