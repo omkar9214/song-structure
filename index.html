@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260911-3">
+<link rel="stylesheet" href="app.css?v=20260911-4">
 </head>
 <body>
 
@@ -154,7 +154,6 @@
         <span class="acct-email" id="cloud-who"></span>
         <span class="acct-sub">Signed in on this device</span>
       </div>
-      <button type="button" class="btn ghost" id="cloud-setpw">Set password</button>
       <button type="button" class="btn danger-outline" id="cloud-signout">Sign out</button>
     </div>
 
@@ -172,11 +171,14 @@
       <small class="dlg-help">No account yet? Enter a password and press <b>Create account</b>.</small>
     </label>
 
-    <label class="field" id="cloud-newpw-field" hidden>
-      <span>New password</span>
-      <input id="cloud-newpw" type="password" autocomplete="new-password" placeholder="at least 6 characters">
-      <small class="dlg-help">Set one and you can sign in on any device without waiting for an email.</small>
-    </label>
+    <div class="field" id="cloud-newpw-field" hidden>
+      <label for="cloud-newpw"><span>Set a password</span></label>
+      <div class="inline-field">
+        <input id="cloud-newpw" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+        <button type="button" class="btn primary" id="cloud-savepw">Save</button>
+      </div>
+      <small class="dlg-help">Then you can sign in on any device with your email and this password — no waiting for an email.</small>
+    </div>
 
     <label class="field" id="cloud-code-field" hidden>
       <span>Or paste the code from that email</span>
@@ -239,10 +241,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260911-3"></script>
-<script src="icons.js?v=20260911-3"></script>
-<script src="db.js?v=20260911-3"></script>
-<script src="cloud.js?v=20260911-3"></script>
-<script src="app.js?v=20260911-3"></script>
+<script src="config.js?v=20260911-4"></script>
+<script src="icons.js?v=20260911-4"></script>
+<script src="db.js?v=20260911-4"></script>
+<script src="cloud.js?v=20260911-4"></script>
+<script src="app.js?v=20260911-4"></script>
 </body>
 </html>

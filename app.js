@@ -693,7 +693,6 @@ const CLOUD_TEXT = {
 function cloudDialog(awaitingCode) {
   const d = $('#dlg-cloud');
   msg('');
-  $('#cloud-newpw-field').hidden = true;
   paintCloud(awaitingCode);
   d.returnValue = '';
   if (!d.open) d.showModal();
@@ -767,19 +766,20 @@ $('#cloud-link').onclick = async () => {
 
 /* Set a password from a session that is already signed in — the way out of
    an email lock-out, since it needs no email at all. */
-$('#cloud-setpw').onclick = async () => {
-  const f = $('#cloud-newpw-field');
-  if (f.hidden) { f.hidden = false; $('#cloud-newpw').focus(); return msg('Type a password, then press Set password again'); }
+async function savePassword() {
   const pw = $('#cloud-newpw').value;
-  if (pw.length < 6) return msg('Use at least 6 characters', 'bad');
+  if (pw.length < 6) { $('#cloud-newpw').focus(); return msg('Use at least 6 characters', 'bad'); }
   msg('Saving…');
   try {
     await Cloud.setPassword(pw);
     $('#cloud-newpw').value = '';
-    f.hidden = true;
-    msg('Password set. You can now sign in on any device with your email and this password.', 'good');
+    msg('Password saved. Sign in anywhere with your email and this password.', 'good');
   } catch (e) { msg(e.message || 'Could not set the password', 'bad'); }
-};
+}
+$('#cloud-savepw').onclick = savePassword;
+$('#cloud-newpw').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); savePassword(); } };
+$('#cloud-pw').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#cloud-go').click(); } };
+$('#cloud-email').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#cloud-pw').focus(); } };
 
 const remember = email => localStorage.setItem('song-structure.email', email);
 
@@ -814,8 +814,7 @@ function paintCloud(awaitingCode) {
 
   $('#cloud-account').hidden    = !signedIn;
   if (signedIn) $('#cloud-who').textContent = Cloud.user.email;
-  $('#cloud-setpw').hidden      = !signedIn;
-  $('#cloud-newpw-field').hidden = !signedIn || $('#cloud-newpw-field').hidden;
+  $('#cloud-newpw-field').hidden = !signedIn;
 
   $('#cloud-email-field').hidden = signedIn;
   $('#cloud-pw-field').hidden    = signedIn;
