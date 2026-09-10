@@ -154,6 +154,7 @@
         <span class="acct-email" id="cloud-who"></span>
         <span class="acct-sub">Signed in on this device</span>
       </div>
+      <button type="button" class="btn ghost" id="cloud-setpw">Set password</button>
       <button type="button" class="btn danger-outline" id="cloud-signout">Sign out</button>
     </div>
 
@@ -163,7 +164,18 @@
     <label class="field" id="cloud-email-field">
       <span>Email <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
       <input id="cloud-email" type="email" autocomplete="email" placeholder="you@example.com" spellcheck="false">
-      <small class="dlg-help">We email you a sign-in link. No password to remember.</small>
+    </label>
+
+    <label class="field" id="cloud-pw-field">
+      <span>Password</span>
+      <input id="cloud-pw" type="password" autocomplete="current-password" placeholder="••••••••">
+      <small class="dlg-help">No account yet? Enter a password and press <b>Create account</b>.</small>
+    </label>
+
+    <label class="field" id="cloud-newpw-field" hidden>
+      <span>New password</span>
+      <input id="cloud-newpw" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+      <small class="dlg-help">Set one and you can sign in on any device without waiting for an email.</small>
     </label>
 
     <label class="field" id="cloud-code-field" hidden>
@@ -174,8 +186,10 @@
 
     <menu class="dlg-actions">
       <button value="cancel" class="btn ghost">Close</button>
+      <button type="button" class="btn ghost" id="cloud-link" hidden>Email a link</button>
       <button type="button" class="btn ghost" id="cloud-verify" hidden>Use code</button>
-      <button type="button" class="btn primary" id="cloud-go">Send me a link</button>
+      <button type="button" class="btn ghost" id="cloud-signup" hidden>Create account</button>
+      <button type="button" class="btn primary" id="cloud-go">Sign in</button>
     </menu>
   </form>
 </dialog>

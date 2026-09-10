@@ -693,6 +693,7 @@ const CLOUD_TEXT = {
 function cloudDialog(awaitingCode) {
   const d = $('#dlg-cloud');
   msg('');
+  $('#cloud-newpw-field').hidden = true;
   paintCloud(awaitingCode);
   d.returnValue = '';
   if (!d.open) d.showModal();
@@ -705,30 +706,82 @@ function msg(text, kind) {
   p.hidden = !text;
 }
 
-/* Send the link. The dialog stays open — closing and reopening it lost your
-   place and looked like a glitch. */
+/* Primary action: sign in with a password (or sync, when already signed in).
+   No email is sent, so the mailer's rate limit cannot lock you out. */
 $('#cloud-go').onclick = async () => {
   if (Cloud.user) {
     msg('Syncing…');
-    try { await Cloud.syncAll(); const n = await Cloud.backfill(); msg(n ? `Synced, ${n} file${n === 1 ? '' : 's'} uploaded` : 'Everything is up to date', 'good'); }
-    catch (e) { msg(e.message || 'Sync failed', 'bad'); }
+    try {
+      await Cloud.syncAll();
+      const n = await Cloud.backfill();
+      msg(n ? `Synced, ${n} file${n === 1 ? '' : 's'} uploaded` : 'Everything is up to date', 'good');
+    } catch (e) { msg(e.message || 'Sync failed', 'bad'); }
     return;
   }
+  const email = $('#cloud-email').value.trim(), pw = $('#cloud-pw').value;
+  if (!email) { $('#cloud-email').focus(); return msg('Enter your email first', 'bad'); }
+  if (!pw)    { $('#cloud-pw').focus();    return msg('Enter your password, or use “Email a link”', 'bad'); }
+  msg('Signing in…');
+  try {
+    await Cloud.signInPassword(email, pw);
+    remember(email);
+    msg('Signed in', 'good');
+    paintCloud();
+    setTimeout(() => $('#dlg-cloud').close(), 600);
+  } catch (e) {
+    msg(/invalid/i.test(e.message || '') ? 'Wrong email or password. If you have never set one, use “Email a link”.' : (e.message || 'Could not sign in'), 'bad');
+  }
+};
+
+$('#cloud-signup').onclick = async () => {
+  const email = $('#cloud-email').value.trim(), pw = $('#cloud-pw').value;
+  if (!email || pw.length < 6) return msg('Enter your email and a password of at least 6 characters', 'bad');
+  msg('Creating your account…');
+  try {
+    const r = await Cloud.signUpPassword(email, pw);
+    remember(email);
+    if (r.signedIn) { msg('Account created — signed in', 'good'); paintCloud(); setTimeout(() => $('#dlg-cloud').close(), 600); }
+    else msg('Account created. Confirm it from the email we sent, then sign in.', 'good');
+  } catch (e) {
+    msg(/already/i.test(e.message || '') ? 'That account exists — sign in with its password, or use “Email a link”.' : (e.message || 'Could not create the account'), 'bad');
+  }
+};
+
+/* Magic link stays as the fallback for when you have no password yet. */
+$('#cloud-link').onclick = async () => {
   const email = $('#cloud-email').value.trim();
   if (!email) { $('#cloud-email').focus(); return msg('Enter your email first', 'bad'); }
-  const btn = $('#cloud-go');
+  const btn = $('#cloud-link');
   btn.disabled = true; msg('Sending…');
   try {
     await Cloud.signIn(email);
-    localStorage.setItem('song-structure.email', email);
-    msg('Link sent — open it in this browser and you are done.', 'good');
+    remember(email);
+    msg('Link sent — open it in this browser.', 'good');
     paintCloud(true);
   } catch (e) {
-    msg(e.message || 'Could not send the link', 'bad');
-  } finally {
-    setTimeout(() => btn.disabled = false, 20000);   /* matches the server-side wait */
-  }
+    msg(/rate limit/i.test(e.message || '')
+      ? 'The email limit is reached (2 per hour on the free plan). Set a password instead, or wait for the hour to turn over.'
+      : (e.message || 'Could not send the link'), 'bad');
+  } finally { setTimeout(() => btn.disabled = false, 20000); }
 };
+
+/* Set a password from a session that is already signed in — the way out of
+   an email lock-out, since it needs no email at all. */
+$('#cloud-setpw').onclick = async () => {
+  const f = $('#cloud-newpw-field');
+  if (f.hidden) { f.hidden = false; $('#cloud-newpw').focus(); return msg('Type a password, then press Set password again'); }
+  const pw = $('#cloud-newpw').value;
+  if (pw.length < 6) return msg('Use at least 6 characters', 'bad');
+  msg('Saving…');
+  try {
+    await Cloud.setPassword(pw);
+    $('#cloud-newpw').value = '';
+    f.hidden = true;
+    msg('Password set. You can now sign in on any device with your email and this password.', 'good');
+  } catch (e) { msg(e.message || 'Could not set the password', 'bad'); }
+};
+
+const remember = email => localStorage.setItem('song-structure.email', email);
 
 $('#cloud-verify').onclick = async () => {
   const email = $('#cloud-email').value.trim(), code = $('#cloud-code').value.trim();
@@ -749,19 +802,30 @@ $('#cloud-signout').onclick = async () => {
 };
 
 function paintCloud(awaitingCode) {
-  const [label, note] = CLOUD_TEXT[Cloud.state] || CLOUD_TEXT.out;
+  const [, note] = CLOUD_TEXT[Cloud.state] || CLOUD_TEXT.out;
   const signedIn = !!Cloud.user;
-  $('#cloud-code-field').hidden = signedIn || !awaitingCode;
-  $('#cloud-verify').hidden = signedIn || !awaitingCode;
+  const dead = Cloud.state === 'off' || Cloud.state === 'nolib';
+
   if (!signedIn && !$('#cloud-email').value)
     $('#cloud-email').value = localStorage.getItem('song-structure.email') || '';
+
   $('#cloud-title').textContent = signedIn ? 'Sync' : 'Sign in to sync';
   $('#cloud-state').textContent = note;
-  $('#cloud-account').hidden = !signedIn;
+
+  $('#cloud-account').hidden    = !signedIn;
   if (signedIn) $('#cloud-who').textContent = Cloud.user.email;
+  $('#cloud-setpw').hidden      = !signedIn;
+  $('#cloud-newpw-field').hidden = !signedIn || $('#cloud-newpw-field').hidden;
+
   $('#cloud-email-field').hidden = signedIn;
-  $('#cloud-go').textContent = signedIn ? 'Sync now' : 'Send me a link';
-  $('#cloud-go').hidden = Cloud.state === 'off' || Cloud.state === 'nolib';
+  $('#cloud-pw-field').hidden    = signedIn;
+  $('#cloud-code-field').hidden  = signedIn || !awaitingCode;
+
+  $('#cloud-verify').hidden = signedIn || !awaitingCode;
+  $('#cloud-signup').hidden = signedIn || dead;
+  $('#cloud-link').hidden   = signedIn || dead;
+  $('#cloud-go').textContent = signedIn ? 'Sync now' : 'Sign in';
+  $('#cloud-go').hidden = dead;
 }
 
 /* The sign-in link opens in a new tab, and two tabs can both hold the chart.

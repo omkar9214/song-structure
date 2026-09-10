@@ -63,6 +63,29 @@ const Cloud = (() => {
     });
     if (error) throw error;
   }
+  /* Password sign-in. No email involved, so it is not subject to the
+     mailer's rate limit and it works in any browser. */
+  async function signInPassword(email, password) {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    user = data.user || null;
+    if (user) await syncAll();
+    return !!user;
+  }
+  async function signUpPassword(email, password) {
+    const { data, error } = await sb.auth.signUp({ email, password });
+    if (error) throw error;
+    user = data.session ? data.session.user : null;
+    if (user) await syncAll();
+    return { signedIn: !!user, needsConfirm: !data.session };
+  }
+  /* set or change the password of the account already signed in here */
+  async function setPassword(password) {
+    const { error } = await sb.auth.updateUser({ password });
+    if (error) throw error;
+    return true;
+  }
+
   async function signOut() { await sb.auth.signOut(); user = null; set('out'); }
 
   /* another tab signed in or out — pick that up without a reload */
@@ -204,7 +227,7 @@ const Cloud = (() => {
   }
 
   return {
-    init, signIn, signOut, verifyCode, refresh, syncAll,
+    init, signIn, signInPassword, signUpPassword, setPassword, signOut, verifyCode, refresh, syncAll,
     onError: f => { errHandler = f; }, touch, flush, remove, upload, fetchMedia, removeMedia, backfill,
     on: f => { subs.push(f); f(state, user); },
     get state() { return state; },
