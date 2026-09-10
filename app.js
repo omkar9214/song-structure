@@ -132,7 +132,14 @@ function renderTrack() {
   const meta = el('span', 'track-meta', t.duration ? fmtTime(t.duration) : '');
   const player = el('audio', 'track-audio');
   player.controls = true; player.preload = 'metadata';
-  Media.url(t.id).then(u => { if (u) player.src = u; });
+  const warn = el('div', 'track-warn');
+  warn.hidden = true;
+  trackURL(t).then(u => {
+    if (u) { player.src = u; return; }
+    player.hidden = true;
+    warn.textContent = trackMissingReason(t);
+    warn.hidden = false;
+  });
 
   const clip = el('button', 'btn ghost track-btn');
   clip.type = 'button';
@@ -149,8 +156,32 @@ function renderTrack() {
     save(); render();
   }, 'danger');
 
-  row.append(name, meta, player, clip, del);
+  row.append(name, meta, player, warn, clip, del);
   host.appendChild(row);
+}
+
+/* The blob lives in this browser's IndexedDB. On a second browser there is
+   no local copy, so fall back to the server and cache it once fetched. */
+const trackURLs = new Map();          /* one fetch per file, not one per player */
+function trackURL(t) {
+  if (trackURLs.has(t.id)) return trackURLs.get(t.id);
+  const p = (async () => {
+    const local = await Media.url(t.id);
+    if (local) return local;
+    if (t.remote && Cloud.ready) {
+      const blob = await Cloud.fetchMedia(t);
+      if (blob) return URL.createObjectURL(blob);
+    }
+    trackURLs.delete(t.id);            /* nothing yet — let a later attempt retry */
+    return null;
+  })();
+  trackURLs.set(t.id, p);
+  return p;
+}
+function trackMissingReason(t) {
+  if (!Cloud.user) return 'This song was added on another device. Sign in to bring it over.';
+  if (!t.remote)   return 'This song was never uploaded. Open it on the device that has it and press Sync.';
+  return 'Could not fetch the song from the server.';
 }
 
 function pickTrack() {
@@ -678,7 +709,11 @@ async function trimDialog(owner, existing) {
   const t = song().track;
   if (!t) return toast('Add the song first');
   const d = $('#dlg-trim');
-  const dur = t.duration || await audioDuration((await Media.get(t.id)).blob) || 0;
+  let dur = t.duration || 0;
+  if (!dur) {
+    const rec = await Media.get(t.id);
+    if (rec) dur = await audioDuration(rec.blob) || 0;
+  }
   if (!t.duration) { t.duration = dur; save(); }
 
   const startS = $('#trim-start'), endS = $('#trim-end');
@@ -711,7 +746,8 @@ async function trimDialog(owner, existing) {
   endT.onblur   = () => paint();
 
   /* preview */
-  const url = await Media.url(t.id);
+  const url = await trackURL(t);
+  if (!url) { toast(trackMissingReason(t)); return; }
   stopTrim();
   trimAudio = new Audio(url);
   const head = $('#trim-head');
@@ -784,8 +820,8 @@ async function addMedia(owner, file) {
 async function playClip(m, owner) {
   const t = song().track;
   if (!t || t.id !== m.track) { toast('The song this clip came from is gone'); return; }
-  const url = await Media.url(t.id);
-  if (!url) { toast('The song is not on this device'); return; }
+  const url = await trackURL(t);
+  if (!url) { toast(trackMissingReason(t)); return; }
   const body = $('#viewer-body');
   body.innerHTML = '';
   $('#viewer-name').textContent = `${m.label || 'Clip'} · ${fmtTime(m.start)}–${fmtTime(m.end)}`;

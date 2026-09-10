@@ -137,6 +137,10 @@ red failed. A failure never loses work — the local copy is always the source o
 Both values in `config.js` are publishable on purpose — the key grants nothing that the policies
 do not allow.
 
+Audio and images live in this browser's IndexedDB, so a second browser starts without them.
+Signed in, the app fetches a missing file from the server the first time you play it and caches
+it locally from then on. Signed out, it says so instead of failing silently.
+
 **Free-tier limits**: 1 GB of files, 500 MB of database, and the project pauses after 7 days with
 no requests (one click to restore, nothing lost).
 

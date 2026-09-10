@@ -214,11 +214,14 @@ const Cloud = (() => {
   async function backfill() {
     if (!user) return;
     const owners = [];
+    const tracks = [];
     state_songs().forEach(so => {
       owners.push(so);
+      if (so.track) tracks.push(so.track);          /* the song's own mp3 counts */
       (so.sections || []).forEach(sec => { owners.push(sec); sec.bars.forEach(b => owners.push(b)); });
     });
     let n = 0;
+    for (const ref of tracks) if (!ref.remote && await upload(ref)) n++;
     for (const o of owners) for (const ref of o.media || []) {
       if (!ref.remote && await upload(ref)) n++;
     }
