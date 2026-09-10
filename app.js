@@ -851,6 +851,7 @@ Cloud.on((st, user) => {
   if (!btn) return;
   const [label] = CLOUD_TEXT[st] || CLOUD_TEXT.out;
   btn.querySelector('.lbl').textContent = user ? label : (st === 'off' || st === 'nolib' ? label : 'Sign in');
+  btn.classList.toggle('primary', !user && st !== 'off' && st !== 'nolib');
   btn.dataset.state = st;
   btn.dataset.tip = user
     ? `${label} — signed in as ${user.email}`
