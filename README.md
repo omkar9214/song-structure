@@ -39,6 +39,10 @@ trimmer gives you start/end sliders, editable `m:ss.s` timestamps, a *Play clip*
 as you like from that one mp3 — a region gets the whole chorus, a bar gets the fill leading
 into it. A clip stores only two numbers, so a hundred of them cost nothing.
 
+**Volume is remembered per thing.** The song keeps its own level, and so does every clip and
+attachment — a quiet voice memo does not come back at the level you last used for the full mix.
+Mute is remembered too.
+
 The **Clip** button on the track bar cuts first and asks where second: make the clip, then
 click 📎 on whichever region or bar should carry it.
 

@@ -132,6 +132,7 @@ function renderTrack() {
   const meta = el('span', 'track-meta', t.duration ? fmtTime(t.duration) : '');
   const player = el('audio', 'track-audio');
   player.controls = true; player.preload = 'metadata';
+  bindVolume(player, t);
   const warn = el('div', 'track-warn');
   warn.hidden = true;
   trackURL(t).then(u => {
@@ -143,7 +144,7 @@ function renderTrack() {
 
   const clip = el('button', 'btn ghost track-btn');
   clip.type = 'button';
-  clip.append(icon('columns', 14), el('span', null, 'Clip'));
+  clip.append(icon('scissors', 14), el('span', null, 'Clip'));
   clip.dataset.tip = 'Cut a piece of this song and attach it to a region or bar';
   clip.onclick = () => trimDialog(null);
 
@@ -162,6 +163,21 @@ function renderTrack() {
 
 /* The blob lives in this browser's IndexedDB. On a second browser there is
    no local copy, so fall back to the server and cache it once fetched. */
+/* Volume is a per-thing setting: the song has one, and every clip and
+   attachment keeps its own — a quiet voice memo should not come back at
+   the level you last used for the full mix. */
+let volTimer = null;
+function bindVolume(audio, obj) {
+  audio.volume = typeof obj.volume === 'number' ? obj.volume : 1;
+  audio.muted  = !!obj.muted;
+  audio.onvolumechange = () => {
+    obj.volume = audio.volume;
+    obj.muted  = audio.muted;
+    clearTimeout(volTimer);                 /* dragging the slider fires constantly */
+    volTimer = setTimeout(() => save(), 400);
+  };
+}
+
 const trackURLs = new Map();          /* one fetch per file, not one per player */
 function trackURL(t) {
   if (trackURLs.has(t.id)) return trackURLs.get(t.id);
@@ -675,7 +691,7 @@ function moveSection(i, d) {
 function mediaIcon(m, owner) {
   const b = el('button', 'micon ' + m.kind);
   b.type = 'button';
-  b.appendChild(icon(m.clip ? 'columns' : (KIND_ICON[m.kind] || 'file'), 12));
+  b.appendChild(icon(m.clip ? 'wave' : (KIND_ICON[m.kind] || 'file'), 12));
   const verb = m.kind === 'image' ? 'View' : m.kind === 'file' ? 'Open' : 'Play';
   b.dataset.tip = m.clip
     ? `Play ${m.label ? m.label + ', ' : ''}${fmtTime(m.start)}–${fmtTime(m.end)} of the song`
@@ -750,6 +766,7 @@ async function trimDialog(owner, existing) {
   if (!url) { toast(trackMissingReason(t)); return; }
   stopTrim();
   trimAudio = new Audio(url);
+  bindVolume(trimAudio, t);
   const head = $('#trim-head');
   const btn = $('#trim-preview');
   const stopAt = () => {
@@ -827,6 +844,7 @@ async function playClip(m, owner) {
   $('#viewer-name').textContent = `${m.label || 'Clip'} · ${fmtTime(m.start)}–${fmtTime(m.end)}`;
   const a = el('audio');
   a.controls = true; a.src = url; a.autoplay = true;
+  bindVolume(a, m);
   a.onloadedmetadata = () => a.currentTime = m.start;
   a.ontimeupdate = () => { if (a.currentTime >= m.end) { a.pause(); a.currentTime = m.start; } };
   body.appendChild(a);
@@ -857,8 +875,8 @@ async function openViewer(m, owner) {
   $('#viewer-name').textContent = m.name;
   let node;
   if (m.kind === 'image') { node = el('img'); node.src = url; }
-  else if (m.kind === 'audio') { node = el('audio'); node.controls = true; node.autoplay = true; node.src = url; }
-  else if (m.kind === 'video') { node = el('video'); node.controls = true; node.src = url; }
+  else if (m.kind === 'audio') { node = el('audio'); node.controls = true; node.autoplay = true; node.src = url; bindVolume(node, m); }
+  else if (m.kind === 'video') { node = el('video'); node.controls = true; node.src = url; bindVolume(node, m); }
   else { node = el('a', null, 'Download ' + m.name); node.href = url; node.download = m.name; }
   body.appendChild(node);
   const rm = $('#viewer-remove');
