@@ -12,7 +12,7 @@
 
    V must match the ?v= stamp in index.html. If it drifts, nothing breaks —
    the assets are simply cached on first use instead of at install. */
-const V = '20260911-15';
+const V = '20260911-16';
 const CACHE = 'song-structure-' + V;
 
 const SHELL = [
@@ -29,7 +29,7 @@ const CDN = /^https:\/\/(fonts\.(googleapis|gstatic)\.com|cdn\.jsdelivr\.net)\//
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(CACHE);
-    await Promise.all(SHELL.map(u => c.add(u).catch(() => {})));
+    await Promise.all(SHELL.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => {})));
     self.skipWaiting();
   })());
 });
@@ -52,7 +52,10 @@ self.addEventListener('fetch', e => {
   if (req.mode === 'navigate') {
     e.respondWith((async () => {
       try {
-        const fresh = await fetch(req);
+        /* GitHub Pages caches index.html for ten minutes, and the worker's own
+           fetch goes through that cache — so ask the server to revalidate, or a
+           deploy stays invisible long after it is live */
+        const fresh = await fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' });
         (await caches.open(CACHE)).put('./index.html', fresh.clone());
         return fresh;
       } catch (_) {
