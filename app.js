@@ -1413,6 +1413,18 @@ $('#import-file').onchange = e => { if (e.target.files[0]) importSong(e.target.f
 $('#viewer-close').onclick = closeViewer;
 $('#viewer').onclick = e => { if (e.target.id === 'viewer') closeViewer(); };
 
+/* ─── offline ───────────────────────────────────────────────────
+   A gig is the case this app has to survive: no signal, phone in airplane
+   mode, chart still opens. The worker keeps a copy of the app itself; the
+   songs were always in this browser. Asking for persistent storage is what
+   stops iOS clearing them after a week of not opening the site. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist().catch(() => {}); }).catch(() => {});
+}
+
 /* ─── tooltips ──────────────────────────────────────────────────
    Anything with data-tip gets one: 400ms on hover, instant on keyboard
    focus, dismissed by Escape (WCAG 1.4.13). Icon-only controls also carry
