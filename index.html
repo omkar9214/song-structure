@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260911-5">
+<link rel="stylesheet" href="app.css?v=20260911-6">
 </head>
 <body>
 
@@ -48,6 +48,8 @@
       </label>
     </div>
   </section>
+
+  <section class="track-bar" id="track-bar"></section>
 
   <section class="roadmap-wrap">
     <div class="roadmap-label">Roadmap</div>
@@ -197,6 +199,72 @@
   </form>
 </dialog>
 
+<!-- ── Attach: file or clip ────────────────────────────────── -->
+<dialog id="dlg-attach" aria-labelledby="attach-title">
+  <form class="dlg" onsubmit="return false">
+    <h2 id="attach-title">Attach</h2>
+    <p class="dlg-note" id="attach-where"></p>
+    <div class="choices">
+      <button type="button" class="choice" id="attach-clip">
+        <span class="choice-t">Clip from the song</span>
+        <span class="choice-s" id="attach-track-name"></span>
+      </button>
+      <button type="button" class="choice" id="attach-file">
+        <span class="choice-t">A file from this device</span>
+        <span class="choice-s">image, audio or video</span>
+      </button>
+    </div>
+    <menu class="dlg-actions">
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ── Trim a clip out of the song ───────────────────────────── -->
+<dialog id="dlg-trim" aria-labelledby="trim-title">
+  <form class="dlg trim" onsubmit="return false">
+    <h2 id="trim-title">Clip from the song</h2>
+
+    <div class="trim-strip" id="trim-strip">
+      <div class="trim-sel" id="trim-sel"></div>
+      <div class="trim-play" id="trim-head" hidden></div>
+    </div>
+
+    <div class="trim-row">
+      <label class="field">
+        <span>Start</span>
+        <input id="trim-start-t" class="time-in" inputmode="numeric" placeholder="0:00.0">
+      </label>
+      <label class="field">
+        <span>End</span>
+        <input id="trim-end-t" class="time-in" inputmode="numeric" placeholder="0:00.0">
+      </label>
+      <div class="field trim-len"><span>Length</span><b id="trim-len">0:00</b></div>
+    </div>
+
+    <label class="slider"><span class="sr-only">Clip start</span>
+      <input type="range" id="trim-start" min="0" max="100" step="0.05" value="0"></label>
+    <label class="slider"><span class="sr-only">Clip end</span>
+      <input type="range" id="trim-end" min="0" max="100" step="0.05" value="100"></label>
+
+    <div class="trim-tools">
+      <button type="button" class="btn" id="trim-preview">Play clip</button>
+      <button type="button" class="btn ghost" id="trim-set-start">Start here</button>
+      <button type="button" class="btn ghost" id="trim-set-end">End here</button>
+    </div>
+
+    <label class="field">
+      <span>Label</span>
+      <input id="trim-label" placeholder="e.g. the riff" spellcheck="false">
+    </label>
+
+    <menu class="dlg-actions">
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="trim-save">Attach clip</button>
+    </menu>
+  </form>
+</dialog>
+
 <!-- ── Confirm ──────────────────────────────────────────────── -->
 <dialog id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
   <form class="dlg confirm" onsubmit="return false">
@@ -242,10 +310,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260911-5"></script>
-<script src="icons.js?v=20260911-5"></script>
-<script src="db.js?v=20260911-5"></script>
-<script src="cloud.js?v=20260911-5"></script>
-<script src="app.js?v=20260911-5"></script>
+<script src="config.js?v=20260911-6"></script>
+<script src="icons.js?v=20260911-6"></script>
+<script src="db.js?v=20260911-6"></script>
+<script src="cloud.js?v=20260911-6"></script>
+<script src="app.js?v=20260911-6"></script>
 </body>
 </html>

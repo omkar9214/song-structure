@@ -90,6 +90,7 @@ function render() {
   $('#song-time').value   = s.time;
   document.title = s.title ? `${s.title} — Song Structure` : 'Song Structure';
 
+  renderTrack();
   renderRoadmap();
 
   const host = $('#sections');
@@ -105,6 +106,100 @@ function render() {
     host.appendChild(renderSection(sec, i, barNo));
     barNo += barCount(sec);
   });
+}
+
+/* ─── the song's own recording ──────────────────────────────────
+   One mp3 for the whole chart. Clips of it get attached to regions and
+   bars, so the same file answers "how does this part go?" everywhere. */
+function renderTrack() {
+  const host = $('#track-bar');
+  host.innerHTML = '';
+  const t = song().track;
+
+  if (!t) {
+    const add = el('button', 'track-add');
+    add.type = 'button';
+    add.append(icon('audio', 15), el('span', null, 'Add the song (mp3)'));
+    add.dataset.tip = 'Attach the recording this chart is of — then clip parts of it onto any region or bar';
+    add.onclick = pickTrack;
+    host.appendChild(add);
+    return;
+  }
+
+  const row = el('div', 'track-row');
+  row.append(icon('audio', 16));
+  const name = el('div', 'track-name', t.name);
+  const meta = el('span', 'track-meta', t.duration ? fmtTime(t.duration) : '');
+  const player = el('audio', 'track-audio');
+  player.controls = true; player.preload = 'metadata';
+  Media.url(t.id).then(u => { if (u) player.src = u; });
+
+  const clip = el('button', 'btn ghost track-btn');
+  clip.type = 'button';
+  clip.append(icon('columns', 14), el('span', null, 'Clip'));
+  clip.dataset.tip = 'Cut a piece of this song and attach it to a region or bar';
+  clip.onclick = () => trimDialog(null);
+
+  const del = tool('trash', 'Remove the song from this chart', async () => {
+    if (!await ask(`${t.name} will be removed, along with every clip taken from it.`, 'Remove')) return;
+    await Media.del(t.id);
+    if (t.remote && Cloud.ready) await Cloud.removeMedia(t.id);
+    forEachOwner(o => { if (o.media) o.media = o.media.filter(m => !(m.clip && m.track === t.id)); });
+    song().track = null;
+    save(); render();
+  }, 'danger');
+
+  row.append(name, meta, player, clip, del);
+  host.appendChild(row);
+}
+
+function pickTrack() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'audio/mpeg,audio/mp3,.mp3';
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    if (!/mpeg|mp3/i.test(f.type) && !/\.mp3$/i.test(f.name)) return toast('That is not an mp3');
+    const ref = await Media.put(f);
+    ref.duration = await audioDuration(f);
+    song().track = ref;
+    save(); render();
+    toast(`Added ${ref.name}`);
+    if (Cloud.ready && await Cloud.upload(ref)) save();
+  };
+  inp.click();
+}
+
+function audioDuration(blob) {
+  return new Promise(res => {
+    const a = new Audio();
+    a.preload = 'metadata';
+    a.onloadedmetadata = () => { res(isFinite(a.duration) ? a.duration : 0); URL.revokeObjectURL(a.src); };
+    a.onerror = () => res(0);
+    a.src = URL.createObjectURL(blob);
+  });
+}
+
+/* every object that can hold attachments */
+function forEachOwner(fn) {
+  const s = song();
+  fn(s);
+  (s.sections || []).forEach(sec => { fn(sec); sec.bars.forEach(fn); });
+}
+
+const fmtTime = t => {
+  if (!isFinite(t) || t < 0) t = 0;
+  const m = Math.floor(t / 60), sec = t - m * 60;
+  return `${m}:${sec.toFixed(1).padStart(4, '0')}`;
+};
+function parseTime(v) {
+  const s = String(v).trim();
+  if (!s) return 0;
+  const parts = s.split(':');
+  const secs = parseFloat(parts.pop()) || 0;
+  const mins = parts.length ? parseInt(parts.pop(), 10) || 0 : 0;
+  return mins * 60 + secs;
 }
 
 function renderRoadmap() {
@@ -244,7 +339,7 @@ function regionStrip(sec, idx) {
     tools.append(
       tool('repeat', 'Set repeat count — how many times this region is played', () => setRepeat(sec)),
       tool('pin', 'Add a pointer above the bars (vocal starts, drums enter…)', () => cueDialog(sec)),
-      tool('clip', 'Attach an image, audio or video to this region', () => pickMedia(f => addMedia(sec, f))),
+      tool('clip', 'Attach a clip of the song, or a file, to this region', () => attachTo(sec, `the ${sec.name || 'region'} region`)),
       tool('plus', 'Add one more bar to this region', () => { sec.bars.push(newBar()); save(); render(); }),
       tool('paint', 'Change the region colour', () => { sec.color = COLORS[(COLORS.indexOf(sec.color) + 1) % COLORS.length]; save(); render(); }),
       tool('up', 'Move this region earlier in the song', () => moveSection(idx, -1)),
@@ -344,7 +439,7 @@ function measure(sec, it, firstInRow) {
       const copy = JSON.parse(JSON.stringify(bar)); copy.id = uid('b');
       sec.bars.splice(i + 1, 0, copy); save(); render();
     }),
-    tool('clip', 'Attach an image, audio or video to this block', () => pickMedia(f => addMedia(bar, f))),
+    tool('clip', 'Attach a clip of the song, or a file, to this block', () => attachTo(bar, name)),
     tool('trash', span > 1 ? 'Delete this block' : 'Delete this bar', () => { sec.bars.splice(i, 1); save(); render(); }, 'danger')
   );
 
@@ -549,13 +644,130 @@ function moveSection(i, d) {
 function mediaIcon(m, owner) {
   const b = el('button', 'micon ' + m.kind);
   b.type = 'button';
-  b.appendChild(icon(KIND_ICON[m.kind] || 'file', 12));
+  b.appendChild(icon(m.clip ? 'columns' : (KIND_ICON[m.kind] || 'file'), 12));
   const verb = m.kind === 'image' ? 'View' : m.kind === 'file' ? 'Open' : 'Play';
-  b.dataset.tip = `${verb} ${m.name}`;
+  b.dataset.tip = m.clip
+    ? `Play ${m.label ? m.label + ', ' : ''}${fmtTime(m.start)}–${fmtTime(m.end)} of the song`
+    : `${verb} ${m.name}`;
   b.setAttribute('aria-label', b.dataset.tip);
   b.onclick = e => { e.stopPropagation(); openViewer(m, owner); };
   return b;
 }
+/* 📎 on a region or bar: pick a file, or cut a clip out of the song */
+function attachTo(owner, where) {
+  if (pendingClip) {                          /* clip cut first, target chosen after */
+    const c = pendingClip; pendingClip = null;
+    (owner.media = owner.media || []).push(c);
+    save(); render(); toast('Clip attached');
+    return;
+  }
+  const t = song().track;
+  if (!t) return pickMedia(f => addMedia(owner, f));
+  const d = $('#dlg-attach');
+  $('#attach-where').textContent = `Attach to ${where}.`;
+  $('#attach-track-name').textContent = t.name;
+  $('#attach-clip').onclick = () => { d.close(); trimDialog(owner); };
+  $('#attach-file').onclick = () => { d.close(); pickMedia(f => addMedia(owner, f)); };
+  d.querySelector('[data-close]').onclick = () => d.close();
+  d.showModal();
+}
+
+/* ─── trimming a clip out of the song ───────────────────────────── */
+let trimAudio = null;
+async function trimDialog(owner, existing) {
+  const t = song().track;
+  if (!t) return toast('Add the song first');
+  const d = $('#dlg-trim');
+  const dur = t.duration || await audioDuration((await Media.get(t.id)).blob) || 0;
+  if (!t.duration) { t.duration = dur; save(); }
+
+  const startS = $('#trim-start'), endS = $('#trim-end');
+  const startT = $('#trim-start-t'), endT = $('#trim-end-t');
+  [startS, endS].forEach(r => { r.min = 0; r.max = dur || 100; r.step = 0.05; });
+
+  let a = existing ? existing.start : 0;
+  let b = existing ? existing.end : Math.min(dur, 15);
+
+  /* `from` says which control moved, so we never overwrite the box being
+     typed in — and never skip an update just because it holds focus. */
+  const paint = from => {
+    a = Math.max(0, Math.min(a, dur));
+    b = Math.max(a + 0.1, Math.min(b, dur));
+    if (from !== 'startS') startS.value = a;
+    if (from !== 'endS')   endS.value = b;
+    if (from !== 'startT') startT.value = fmtTime(a);
+    if (from !== 'endT')   endT.value = fmtTime(b);
+    $('#trim-len').textContent = fmtTime(b - a);
+    const sel = $('#trim-sel');
+    sel.style.left  = (dur ? a / dur * 100 : 0) + '%';
+    sel.style.width = (dur ? (b - a) / dur * 100 : 100) + '%';
+  };
+
+  startS.oninput = () => { a = parseFloat(startS.value); if (a > b - 0.1) a = b - 0.1; paint('startS'); };
+  endS.oninput   = () => { b = parseFloat(endS.value);   if (b < a + 0.1) b = a + 0.1; paint('endS'); };
+  startT.oninput = () => { a = parseTime(startT.value); paint('startT'); };
+  endT.oninput   = () => { b = parseTime(endT.value);   paint('endT'); };
+  startT.onblur = () => paint();
+  endT.onblur   = () => paint();
+
+  /* preview */
+  const url = await Media.url(t.id);
+  stopTrim();
+  trimAudio = new Audio(url);
+  const head = $('#trim-head');
+  const btn = $('#trim-preview');
+  const stopAt = () => {
+    if (!trimAudio) return;
+    if (trimAudio.currentTime >= b) { trimAudio.pause(); trimAudio.currentTime = a; }
+    head.hidden = false;
+    head.style.left = (dur ? trimAudio.currentTime / dur * 100 : 0) + '%';
+    btn.textContent = trimAudio.paused ? 'Play clip' : 'Stop';
+  };
+  trimAudio.ontimeupdate = stopAt;
+  trimAudio.onpause = () => btn.textContent = 'Play clip';
+  btn.onclick = () => {
+    if (!trimAudio) return;
+    if (trimAudio.paused) { trimAudio.currentTime = a; trimAudio.play(); btn.textContent = 'Stop'; }
+    else { trimAudio.pause(); }
+  };
+  $('#trim-set-start').onclick = () => { a = trimAudio ? trimAudio.currentTime : a; paint(); };
+  $('#trim-set-end').onclick   = () => { b = trimAudio ? trimAudio.currentTime : b; paint(); };
+  $('#trim-strip').onclick = e => {
+    const r = $('#trim-strip').getBoundingClientRect();
+    if (trimAudio) { trimAudio.currentTime = (e.clientX - r.left) / r.width * dur; stopAt(); }
+  };
+
+  $('#trim-label').value = existing ? (existing.label || '') : '';
+  $('#trim-title').textContent = existing ? 'Edit clip' : 'Clip from the song';
+  $('#trim-save').textContent = existing ? 'Save clip' : (owner ? 'Attach clip' : 'Choose where…');
+
+  $('#trim-save').onclick = () => {
+    const clip = {
+      id: existing ? existing.id : uid('k'),
+      clip: true, track: t.id, kind: 'clip',
+      start: +a.toFixed(2), end: +b.toFixed(2),
+      label: $('#trim-label').value.trim(),
+      name: ($('#trim-label').value.trim() || `${fmtTime(a)}–${fmtTime(b)}`) + ` · ${t.name}`
+    };
+    stopTrim(); d.close();
+    if (existing) { Object.assign(existing, clip); save(); render(); return; }
+    if (owner) { (owner.media = owner.media || []).push(clip); save(); render(); toast('Clip attached'); return; }
+    pendingClip = clip;                       /* started from the track bar */
+    toast('Now click 📎 on the region or bar to put it on');
+  };
+  d.querySelector('[data-close]').onclick = () => { stopTrim(); d.close(); };
+  d.oncancel = stopTrim;
+
+  paint();
+  d.showModal();
+}
+function stopTrim() {
+  if (!trimAudio) return;
+  trimAudio.pause(); trimAudio.ontimeupdate = null; trimAudio = null;
+  $('#trim-head').hidden = true;
+}
+let pendingClip = null;
+
 function pickMedia(cb) {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'image/*,audio/*,video/*'; inp.multiple = true;
@@ -569,7 +781,34 @@ async function addMedia(owner, file) {
   toast(`Attached ${ref.name}`);
   if (Cloud.ready && await Cloud.upload(ref)) save();
 }
+async function playClip(m, owner) {
+  const t = song().track;
+  if (!t || t.id !== m.track) { toast('The song this clip came from is gone'); return; }
+  const url = await Media.url(t.id);
+  if (!url) { toast('The song is not on this device'); return; }
+  const body = $('#viewer-body');
+  body.innerHTML = '';
+  $('#viewer-name').textContent = `${m.label || 'Clip'} · ${fmtTime(m.start)}–${fmtTime(m.end)}`;
+  const a = el('audio');
+  a.controls = true; a.src = url; a.autoplay = true;
+  a.onloadedmetadata = () => a.currentTime = m.start;
+  a.ontimeupdate = () => { if (a.currentTime >= m.end) { a.pause(); a.currentTime = m.start; } };
+  body.appendChild(a);
+  const edit = el('button', 'btn', 'Edit clip');
+  edit.type = 'button';
+  edit.onclick = () => { closeViewer(); trimDialog(owner, m); };
+  body.appendChild(edit);
+  const rm = $('#viewer-remove');
+  rm.onclick = async () => {
+    if (!await ask(`${m.label || 'This clip'} will be removed from the chart. The song itself stays.`, 'Remove')) return;
+    owner.media.splice(owner.media.findIndex(x => x.id === m.id), 1);
+    save(); render(); closeViewer();
+  };
+  $('#viewer').hidden = false;
+}
+
 async function openViewer(m, owner) {
+  if (m.clip) return playClip(m, owner);
   let url = await Media.url(m.id);
   if (!url && m.remote && Cloud.ready) {           /* attached on another device */
     toast(`Fetching ${m.name}\u2026`);

@@ -32,6 +32,16 @@ continues on the next row, marked *cont.*
 
 **Roadmap** — auto-built from your regions: `Intro · Chorus ×2`. Click a chip to jump to it.
 
+**The song itself** — above the roadmap, *Add the song (mp3)* attaches the recording this
+chart is of. Once it is there, every 📎 offers **a clip of the song** as well as a file: the
+trimmer gives you start/end sliders, editable `m:ss.s` timestamps, a *Play clip* preview and
+*Start here / End here* buttons that mark the point you are listening to. Attach as many clips
+as you like from that one mp3 — a region gets the whole chorus, a bar gets the fill leading
+into it. A clip stores only two numbers, so a hundred of them cost nothing.
+
+The **Clip** button on the track bar cuts first and asks where second: make the clip, then
+click 📎 on whichever region or bar should carry it.
+
 **Regions** — `+ Add region` asks for a name, a bar count and a repeat. Hover the strip for
 its tools:
 
