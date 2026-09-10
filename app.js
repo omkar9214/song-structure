@@ -109,11 +109,36 @@ function render() {
   fitAllChords();
 }
 
+/* ─── one sound at a time ───────────────────────────────────────
+   A detached <audio> keeps playing — removing it from the DOM does not
+   stop it — so opening a second clip left the first one running under it.
+   Every player registers here and the previous one is paused. */
+const Sound = {
+  current: null,
+  claim(node) {
+    if (this.current && this.current !== node) { try { this.current.pause(); } catch (_) {} }
+    this.current = node;
+  },
+  stop(node) {
+    if (!node) return;
+    try { node.pause(); } catch (_) {}
+    if (this.current === node) this.current = null;
+  },
+  stopIn(host) { if (host) host.querySelectorAll('audio,video').forEach(n => Sound.stop(n)); }
+};
+/* play does not bubble, but it does capture */
+document.addEventListener('play', e => Sound.claim(e.target), true);
+
 /* ─── the song's own recording ──────────────────────────────────
    One mp3 for the whole chart. Clips of it get attached to regions and
    bars, so the same file answers "how does this part go?" everywhere. */
 function renderTrack() {
   const host = $('#track-bar');
+  /* the whole bar is rebuilt on every render; carry the playhead over rather
+     than leaving an invisible player running behind the new one */
+  const old = host.querySelector('audio');
+  const was = old ? { at: old.currentTime, playing: !old.paused } : null;
+  Sound.stopIn(host);
   host.innerHTML = '';
   const t = song().track;
 
@@ -137,7 +162,12 @@ function renderTrack() {
   const warn = el('div', 'track-warn');
   warn.hidden = true;
   trackURL(t).then(u => {
-    if (u) { player.src = u; return; }
+    if (u) {
+      player.src = u;
+      if (was && was.at) player.onloadedmetadata = () => { player.currentTime = was.at; };
+      if (was && was.playing) player.play().catch(() => {});
+      return;
+    }
     player.hidden = true;
     warn.textContent = trackMissingReason(t);
     warn.hidden = false;
@@ -834,7 +864,7 @@ async function trimDialog(owner, existing) {
   trimAudio.onpause = () => btn.textContent = 'Play clip';
   btn.onclick = () => {
     if (!trimAudio) return;
-    if (trimAudio.paused) { trimAudio.currentTime = a; trimAudio.play(); btn.textContent = 'Stop'; }
+    if (trimAudio.paused) { Sound.claim(trimAudio); trimAudio.currentTime = a; trimAudio.play(); btn.textContent = 'Stop'; }
     else { trimAudio.pause(); }
   };
   $('#trim-set-start').onclick = () => { a = trimAudio ? trimAudio.currentTime : a; paint(); };
@@ -870,7 +900,7 @@ async function trimDialog(owner, existing) {
 }
 function stopTrim() {
   if (!trimAudio) return;
-  trimAudio.pause(); trimAudio.ontimeupdate = null; trimAudio = null;
+  Sound.stop(trimAudio); trimAudio.ontimeupdate = null; trimAudio = null;
   $('#trim-head').hidden = true;
 }
 let pendingClip = null;
@@ -894,6 +924,7 @@ async function playClip(m, owner) {
   const url = await trackURL(t);
   if (!url) { toast(trackMissingReason(t)); return; }
   const body = $('#viewer-body');
+  Sound.stopIn(body);
   body.innerHTML = '';
   $('#viewer-name').textContent = `${m.label || 'Clip'} · ${fmtTime(m.start)}–${fmtTime(m.end)}`;
   const a = el('audio');
@@ -925,6 +956,7 @@ async function openViewer(m, owner) {
   }
   if (!url) { toast('That file is not on this device'); return; }
   const body = $('#viewer-body');
+  Sound.stopIn(body);
   body.innerHTML = '';
   $('#viewer-name').textContent = m.name;
   let node;
@@ -943,7 +975,7 @@ async function openViewer(m, owner) {
   };
   $('#viewer').hidden = false;
 }
-function closeViewer() { $('#viewer').hidden = true; $('#viewer-body').innerHTML = ''; }
+function closeViewer() { Sound.stopIn($('#viewer-body')); $('#viewer').hidden = true; $('#viewer-body').innerHTML = ''; }
 function dropZone(node, cb) {
   node.ondragover = e => {
     if (![...(e.dataTransfer.types || [])].includes('Files')) return;
@@ -1311,6 +1343,51 @@ function toast(msg) {
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200);
 }
 
+/* ─── Save ──────────────────────────────────────────────────────
+   Every keystroke is already written to this device, so Save is really
+   "push it to my account now" — the one button people look for before
+   they close a laptop or walk on stage. */
+let savingNow = false;
+async function saveNow() {
+  if (savingNow) return;
+  save();                                    /* flush the current song and queue it */
+  const btn = $('#btn-save'), lbl = btn.querySelector('.lbl');
+  const done = text => {
+    const svg = btn.querySelector('svg');
+    if (svg) svg.replaceWith(icon('check', 15));
+    lbl.textContent = 'Saved';
+    btn.classList.add('saved');
+    setTimeout(() => {
+      const cur = btn.querySelector('svg');
+      if (cur) cur.replaceWith(icon('save', 15));
+      lbl.textContent = 'Save';
+      btn.classList.remove('saved');
+    }, 1600);
+    if (text) toast(text);
+  };
+
+  if (!window.Cloud || !Cloud.user) {
+    done(Cloud && (Cloud.state === 'off' || Cloud.state === 'nolib')
+      ? 'Saved on this device'
+      : 'Saved on this device — sign in to have it on every device');
+    return;
+  }
+  savingNow = true; btn.disabled = true; lbl.textContent = 'Saving…';
+  try {
+    await Cloud.syncAll();
+    const n = await Cloud.backfill();
+    done(n ? `Saved — ${n} file${n === 1 ? '' : 's'} uploaded` : 'Saved to your account');
+  } catch (e) {
+    lbl.textContent = 'Save';
+    toast(e.message || 'Could not reach your account — the chart is safe on this device');
+  } finally { savingNow = false; btn.disabled = false; }
+}
+
+/* ⌘S / Ctrl-S does the same thing, instead of saving the page */
+window.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveNow(); }
+});
+
 /* ─── wiring ────────────────────────────────────────────────────── */
 $('#song-title').oninput  = e => {
   song().title = e.target.value; save();
@@ -1327,6 +1404,7 @@ $('#drawer-close').onclick = closeDrawer;
 $('#drawer-scrim').onclick = closeDrawer;
 $('#btn-new-song').onclick = () => { const s = blankSong(); state.songs.push(s); state.currentId = s.id; save(); render(); $('#song-title').focus(); };
 $('#btn-pdf').onclick      = exportPDF;
+$('#btn-save').onclick     = saveNow;
 $('#btn-cloud').onclick    = cloudDialog;
 $('#btn-account').onclick  = () => { closeDrawer(); cloudDialog(); };
 $('#btn-backup').onclick   = exportSong;
