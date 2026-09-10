@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260911-4">
+<link rel="stylesheet" href="app.css?v=20260911-5">
 </head>
 <body>
 
@@ -65,7 +65,7 @@
 
 <!-- ── Add / edit section dialog ─────────────────────────────── -->
 <dialog id="dlg-section" aria-labelledby="dlg-section-title">
-  <form method="dialog" class="dlg">
+  <form class="dlg" onsubmit="return false">
     <h2 id="dlg-section-title">Add region</h2>
 
     <label class="field">
@@ -102,19 +102,19 @@
     </label>
 
     <menu class="dlg-actions">
-      <button value="cancel" class="btn ghost">Cancel</button>
-      <button value="ok" class="btn primary" id="sec-submit">Add region</button>
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="sec-submit">Add region</button>
     </menu>
   </form>
 </dialog>
 
 <!-- ── Cue dialog ────────────────────────────────────────────── -->
 <dialog id="dlg-cue" aria-labelledby="dlg-cue-title">
-  <form method="dialog" class="dlg">
+  <form class="dlg" onsubmit="return false">
     <h2 id="dlg-cue-title">Pointer / cue</h2>
     <label class="field">
-      <span>Text <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
-      <input id="cue-text" list="cue-presets" placeholder="Vocal starts here" required spellcheck="false">
+      <span>Text</span>
+      <input id="cue-text" list="cue-presets" placeholder="Vocal starts here" spellcheck="false">
       <datalist id="cue-presets">
         <option>Vocal starts here</option><option>Drums enter</option><option>Bass enters</option>
         <option>Full band</option><option>Guitar solo</option><option>Everyone out</option>
@@ -139,15 +139,16 @@
       </label>
     </div>
     <menu class="dlg-actions">
-      <button value="cancel" class="btn ghost">Cancel</button>
-      <button value="ok" class="btn primary">Save cue</button>
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn danger-outline" id="cue-delete" hidden>Delete</button>
+      <button type="button" class="btn primary" id="cue-save">Save cue</button>
     </menu>
   </form>
 </dialog>
 
 <!-- ── Account / sync ───────────────────────────────────────── -->
 <dialog id="dlg-cloud" aria-labelledby="cloud-title">
-  <form method="dialog" class="dlg" id="cloud-form">
+  <form class="dlg" id="cloud-form" onsubmit="return false">
     <h2 id="cloud-title">Sync</h2>
     <div class="account-row" id="cloud-account" hidden>
       <div class="acct">
@@ -187,7 +188,7 @@
     </label>
 
     <menu class="dlg-actions">
-      <button value="cancel" class="btn ghost">Close</button>
+      <button type="button" value="cancel" class="btn ghost" data-close>Close</button>
       <button type="button" class="btn ghost" id="cloud-link" hidden>Email a link</button>
       <button type="button" class="btn ghost" id="cloud-verify" hidden>Use code</button>
       <button type="button" class="btn ghost" id="cloud-signup" hidden>Create account</button>
@@ -198,12 +199,12 @@
 
 <!-- ── Confirm ──────────────────────────────────────────────── -->
 <dialog id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
-  <form method="dialog" class="dlg confirm">
+  <form class="dlg confirm" onsubmit="return false">
     <h2 id="confirm-title">Are you sure?</h2>
     <p id="confirm-body"></p>
     <menu class="dlg-actions">
-      <button value="cancel" class="btn ghost">Cancel</button>
-      <button value="ok" class="btn danger-btn" id="confirm-ok">Delete</button>
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn danger-btn" id="confirm-ok">Delete</button>
     </menu>
   </form>
 </dialog>
@@ -241,10 +242,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260911-4"></script>
-<script src="icons.js?v=20260911-4"></script>
-<script src="db.js?v=20260911-4"></script>
-<script src="cloud.js?v=20260911-4"></script>
-<script src="app.js?v=20260911-4"></script>
+<script src="config.js?v=20260911-5"></script>
+<script src="icons.js?v=20260911-5"></script>
+<script src="db.js?v=20260911-5"></script>
+<script src="cloud.js?v=20260911-5"></script>
+<script src="app.js?v=20260911-5"></script>
 </body>
 </html>

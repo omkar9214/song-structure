@@ -148,7 +148,7 @@ function renderSection(sec, idx, startBar) {
 
     const box = el('div', 'rowbox');
     box.style.gridColumn = `span ${Math.max(1, row.used)}`;
-    box.appendChild(regionStrip(sec, idx, first, rows.length > 1 ? ri + 1 : 0));
+    if (first) box.appendChild(regionStrip(sec, idx));
     if (!sec.collapsed) box.appendChild(measureRow(sec, row));
     sys.appendChild(box);
 
@@ -204,7 +204,7 @@ function markerLane(sec, row) {
 function cueOffset(sec, i) { return sec.bars.slice(0, i).reduce((n, b) => n + spanOf(b), 0); }
 
 /* the slim region rectangle across the top of the box */
-function regionStrip(sec, idx, first, contPart) {
+function regionStrip(sec, idx) {
   const r = el('div', 'region');
 
   const caret = el('button', 'r-caret');
@@ -214,38 +214,31 @@ function regionStrip(sec, idx, first, contPart) {
   caret.setAttribute('aria-label', caret.dataset.tip);
   caret.setAttribute('aria-expanded', String(!sec.collapsed));
   caret.onclick = () => { sec.collapsed = !sec.collapsed; save(); render(); };
-  if (first) r.appendChild(caret);
-  else {
-    const cont = el('span', 'r-caret r-cont', '\u21b3');
-    cont.dataset.tip = `Still ${sec.name || 'the same region'} — it is longer than four bars, so it carries on to this line`;
-    r.appendChild(cont);
-  }
+  r.appendChild(caret);
 
   const mid = el('div', 'r-mid');
   const name = el('input', 'r-name');
   name.value = sec.name; name.spellcheck = false; name.placeholder = 'region name';
   name.setAttribute('aria-label', 'Region name');
-  name.readOnly = !first;
   const fit = () => name.size = Math.max(5, (name.value || name.placeholder).length);
   fit();
   name.oninput = () => { sec.name = name.value; fit(); save(); renderRoadmap(); };
   mid.appendChild(name);
 
-  if (first && repeatEdit === sec.id) {
+  if (repeatEdit === sec.id) {
     mid.appendChild(repeatField(sec));
-  } else if (first && (sec.repeat || 1) > 1) {
+  } else if ((sec.repeat || 1) > 1) {
     const x = el('button', 'r-rep', '×' + sec.repeat);
     x.type = 'button';
     x.dataset.tip = `Played ${sec.repeat} times — click to change`;
     x.onclick = () => setRepeat(sec);
     mid.appendChild(x);
   }
-  if (first && sec.note) mid.appendChild(el('span', 'r-note', sec.note));
-  if (!first && contPart) mid.appendChild(el('span', 'r-part', 'cont.'));
+  if (sec.note) mid.appendChild(el('span', 'r-note', sec.note));
   r.appendChild(mid);
 
   const right = el('div', 'r-right');
-  if (first) {
+  {
     (sec.media || []).forEach(m => right.appendChild(mediaIcon(m, sec)));
     const tools = el('div', 'r-tools');
     tools.append(
@@ -642,16 +635,16 @@ function sectionDialog() {
   $('#sec-repeat').value = 1;
   $('#sec-note').value = '';
   const d = $('#dlg-section');
-  d.onclose = () => {
-    if (d.returnValue !== 'ok') return;
+  $('#sec-submit').onclick = () => {
     const name = $('#sec-name').value.trim() || 'Section';
     const bars = Math.min(128, Math.max(1, parseInt($('#sec-bars').value, 10) || 8));
     const rep  = Math.min(64, Math.max(1, parseInt($('#sec-repeat').value, 10) || 1));
+    d.close();
     s.sections.push(newSection(name, bars, rep, pendingColor, $('#sec-note').value.trim()));
     save(); render();
     document.getElementById(s.sections[s.sections.length - 1].id).scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
-  d.returnValue = '';                       /* Esc must not re-use the previous 'ok' */
+  d.querySelector('[data-close]').onclick = () => d.close();
   d.showModal();
   $('#sec-name').select();
   setTimeout(() => $('#sec-name').select(), 30);
@@ -659,21 +652,33 @@ function sectionDialog() {
 function cueDialog(sec, existing) {
   const d = $('#dlg-cue');
   $('#cue-text').value = existing ? existing.text : '';
-  $('#cue-icon').value = existing ? existing.icon : '🎤';
+  $('#cue-icon').value = existing ? existing.icon : '\ud83c\udfa4';
   $('#cue-bar').value  = existing ? existing.bar : 1;
   $('#cue-bar').max = barCount(sec) || 1;
-  d.onclose = () => {
-    if (d.returnValue !== 'ok') return;
+  $('#cue-delete').hidden = !existing;
+
+  const drop = () => {
+    const i = (sec.cues || []).indexOf(existing);
+    if (i > -1) sec.cues.splice(i, 1);
+    save(); render();
+  };
+
+  $('#cue-save').onclick = () => {
     const text = $('#cue-text').value.trim();
-    if (!text) return;
-    const data = { text, icon: $('#cue-icon').value,
-                   bar: Math.min(barCount(sec) || 1, Math.max(1, parseInt($('#cue-bar').value, 10) || 1)) };
+    d.close();
+    if (!text) { if (existing) drop(); return; }   /* cleared means remove it */
+    const data = {
+      text, icon: $('#cue-icon').value,
+      bar: Math.min(barCount(sec) || 1, Math.max(1, parseInt($('#cue-bar').value, 10) || 1))
+    };
     if (existing) Object.assign(existing, data);
     else (sec.cues = sec.cues || []).push({ id: uid('c'), ...data });
     sec.cues.sort((a, b) => a.bar - b.bar);
     save(); render();
   };
-  d.returnValue = '';
+  $('#cue-delete').onclick = () => { d.close(); drop(); };
+  d.querySelector('[data-close]').onclick = () => d.close();
+
   d.showModal();
   $('#cue-text').select();
   setTimeout(() => $('#cue-text').select(), 30);
@@ -694,7 +699,6 @@ function cloudDialog(awaitingCode) {
   const d = $('#dlg-cloud');
   msg('');
   paintCloud(awaitingCode);
-  d.returnValue = '';
   if (!d.open) d.showModal();
 }
 
@@ -795,6 +799,8 @@ $('#cloud-verify').onclick = async () => {
   } catch (e) { msg(e.message || 'That code did not work', 'bad'); }
 };
 
+$('#dlg-cloud').querySelector('[data-close]').onclick = () => $('#dlg-cloud').close();
+
 $('#cloud-signout').onclick = async () => {
   await Cloud.signOut();
   msg('Signed out — your songs stay on this device', 'good');
@@ -868,8 +874,10 @@ function ask(body, okLabel = 'Delete') {
     const d = $('#dlg-confirm');
     $('#confirm-body').textContent = body;
     $('#confirm-ok').textContent = okLabel;
-    d.onclose = () => res(d.returnValue === 'ok');
-    d.returnValue = '';
+    const done = yes => { d.close(); res(yes); };
+    $('#confirm-ok').onclick = () => done(true);
+    d.querySelector('[data-close]').onclick = () => done(false);
+    d.oncancel = () => res(false);          /* Escape */
     d.showModal();
   });
 }
