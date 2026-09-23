@@ -144,6 +144,12 @@ focuses anything smaller and does not zoom back out.
 - `←` `→` on a block's grip → move that block one place
 - `Esc` → close a dialog / viewer / gig mode
 
+### Theme
+
+**Theme** in the drawer cycles System → Light → Dark, remembered on that device. System
+follows whatever the phone or laptop is set to, which is right most of the time; Dark is
+there for a dark stage in daylight hours.
+
 ## Sync (optional)
 
 Everything works offline with no account — the cloud is a layer on top, not a requirement.
@@ -176,6 +182,19 @@ it locally from then on. Signed out, it says so instead of failing silently.
 
 **Free-tier limits**: 1 GB of files, 500 MB of database, and the project pauses after 7 days with
 no requests (one click to restore, nothing lost).
+
+### When two devices change the same song
+
+Each device remembers the version of each song it last agreed with the server on. If only
+one side has moved on from that point, that side wins, quietly — the ordinary case. If
+**both** have moved — you changed a song on the laptop, then changed the same song on the
+iPad before it had seen the laptop's version — neither is thrown away: the copy on the
+device in your hands stays as the song, and the other one is kept beside it as
+*"<title> (other device, Sep 23 14:32)"*. Both end up on both devices, and a message tells
+you it happened.
+
+Setlists are still newest-wins as a whole list, since a running order merged half-and-half
+would be worse than either version.
 
 ## Design notes
 

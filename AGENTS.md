@@ -100,7 +100,13 @@ The `songs` table is `(owner, id, data jsonb, updated_at)`. One row per song, pl
 - **Gig mode is read-only by construction** — a separate rendering with no inputs at all, not
   the editor with controls hidden. If you add a control to it, ask whether a sleeve can hit it.
 - **Touch: nothing opens by itself.** Safari fires `:hover` on a tap. `⋯` opens the action
-  sheet; that is the only way tools appear on touch.
+  sheet; that is the only way tools appear on touch. There is **no drag handle on touch** —
+  it sat over the chord and a tap on it started a drag; reordering is a labelled row in the
+  sheet.
+- **Themes come in three:** System, Light, Dark (`data-theme` on `<html>`, remembered per
+  device). The dark tokens exist twice in `app.css` — once under `prefers-color-scheme` for
+  the system setting, once under `[data-theme="dark"]` for his choice. **Edit one, edit the
+  other.**
 - **16px minimum for anything typeable on touch** — below that iOS zooms the page on focus
   and does not zoom back out.
 - **~40px minimum tap targets** on touch.
