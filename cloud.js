@@ -52,7 +52,7 @@ const Cloud = (() => {
       error: h.get('error_description') || q.get('error_description') || null
     };
   }
-  let errHandler = null;
+  let errHandler = null, conflictHandler = null;
   const onError = msg => errHandler && errHandler(msg);
 
   /* ── auth ───────────────────────────────────────────────────── */
@@ -116,6 +116,31 @@ const Cloud = (() => {
      as a single row marked __setlists — filtered out of the song list at both
      ends, and shaped like an empty song so an out-of-date client shows a
      harmless blank row rather than falling over. */
+  /* Who moved since the version this device last agreed with the server?
+       'none'   nobody — just refresh the base
+       'remote' only they moved — take theirs
+       'local'  only we moved — push ours
+       'both'   both moved — keep both, never discard
+     With no base yet (the first sync after this device learned to track one)
+     it falls back to newest-wins, which is what it always did, so an upgrade
+     does not manufacture a pile of duplicates. */
+  function decide(mine, remote, base) {
+    const known = base != null;
+    const localMoved  = known ? stamp(mine)   > base : stamp(mine)   > stamp(remote);
+    const remoteMoved = known ? stamp(remote) > base : stamp(remote) > stamp(mine);
+    if (localMoved && remoteMoved) return 'both';
+    if (remoteMoved) return 'remote';
+    if (localMoved)  return 'local';
+    return 'none';
+  }
+
+  /* Postgres will not let one statement touch the same key twice */
+  const dedupe = songs => {
+    const by = new Map();
+    songs.forEach(s => by.set(s.id, s));
+    return [...by.values()];
+  };
+
   const LIST_ROW = '__setlists';
   const isListRow = d => !!(d && d.__setlists);
   function listPayload() {
@@ -133,33 +158,49 @@ const Cloud = (() => {
       const local = state_songs();
       const byId = Object.fromEntries(local.map(s => [s.id, s]));
       let changed = false;
+      const toPush = [], kept = [], seen = new Set();
 
-      /* remote → local */
+      /* remote → local, one song at a time, against this device's base stamp */
       let remoteLists = null;
       for (const row of rows || []) {
         const remote = row.data;
         if (isListRow(remote)) { remoteLists = remote; continue; }
+        seen.add(row.id);
         const mine = byId[row.id];
-        if (!mine) { local.push(remote); changed = true; }
-        else if (stamp(remote) > stamp(mine)) { Object.assign(mine, remote); changed = true; }
+        if (!mine) { local.push(remote); set_base(row.id, stamp(remote)); changed = true; continue; }
+
+        const d = decide(mine, remote, base_of(row.id));
+        if (d === 'both') {
+          const copy = keep_both(mine, remote);     /* their version, kept as its own song */
+          mine.updated = Date.now();                /* the one you are holding stays live */
+          toPush.push(mine, copy); kept.push(copy.title); changed = true;
+        } else if (d === 'remote') {
+          Object.assign(mine, remote); set_base(row.id, stamp(remote)); changed = true;
+        } else if (d === 'local') {
+          toPush.push(mine);
+        } else {
+          set_base(row.id, stamp(mine));
+        }
       }
       if (remoteLists && stamp(remoteLists) > state_lists_stamp()) {
         take_lists(remoteLists.setlists || [], stamp(remoteLists));
         changed = true;
       }
 
-      /* local → remote (anything missing there, or newer here) */
-      const remoteById = Object.fromEntries((rows || []).map(r => [r.id, r.data]));
-      const up = local.filter(s => {
-        const r = remoteById[s.id];
-        return !r || stamp(s) > stamp(r);
-      });
-      if (up.length) await upsert(up);
+      /* songs that only exist here */
+      for (const s of local) if (!seen.has(s.id)) toPush.push(s);
+
+      const once = dedupe(toPush);      /* one row per id, or the upsert is rejected */
+      if (once.length) {
+        await upsert(once);
+        once.forEach(s => set_base(s.id, stamp(s)));
+      }
       if (!remoteLists || state_lists_stamp() > stamp(remoteLists)) {
         if (state_lists().length || remoteLists) await upsert([listPayload()]);
       }
 
       if (changed) onPulled();
+      if (kept.length && conflictHandler) conflictHandler(kept);
       set('ok');
     } catch (e) {
       console.warn('[cloud] sync failed', e);
@@ -197,14 +238,44 @@ const Cloud = (() => {
     if (!user || (!pending.size && !listsDirty)) return;
     const ids = [...pending]; pending.clear();
     const songs = state_songs().filter(s => ids.includes(s.id));
-    if (listsDirty) { songs.push(listPayload()); listsDirty = false; }
-    if (!songs.length) return set('ok');
+    const lists = listsDirty ? [listPayload()] : [];
+    listsDirty = false;
+    if (!songs.length && !lists.length) return set('ok');
     set('syncing');
-    try { await upsert(songs); set('ok'); }
+    try { await pushSongs(songs, lists); set('ok'); }
     catch (e) { console.warn('[cloud] push failed', e); set('error'); }
   }
 
+  /* A push is the other place a song can be trampled: this device may have
+     been holding a stale copy while the other one moved. Look before writing. */
+  async function pushSongs(songs, extra) {
+    const out = (extra || []).slice(), kept = [];
+    if (songs.length) {
+      const { data: rows, error } = await sb.from('songs').select('id,data').in('id', songs.map(s => s.id));
+      if (error) throw error;
+      const remoteById = Object.fromEntries((rows || []).map(r => [r.id, r.data]));
+      for (const s of songs) {
+        const r = remoteById[s.id];
+        if (r && decide(s, r, base_of(s.id)) === 'both') {
+          const copy = keep_both(s, r);
+          s.updated = Date.now();
+          out.push(copy); kept.push(copy.title);
+        }
+        out.push(s);
+      }
+    }
+    const once = dedupe(out);
+    if (!once.length) return;
+    await upsert(once);
+    once.forEach(s => { if (!isListRow(s)) set_base(s.id, stamp(s)); });
+    if (kept.length) {
+      onPulled();
+      if (conflictHandler) conflictHandler(kept);
+    }
+  }
+
   async function remove(id) {
+    forget_base(id);
     if (!user) return;
     await sb.from('songs').delete().eq('owner', user.id).eq('id', id);
   }
@@ -262,7 +333,8 @@ const Cloud = (() => {
 
   return {
     init, signIn, signInPassword, signUpPassword, setPassword, signOut, verifyCode, refresh, syncAll,
-    onError: f => { errHandler = f; }, touch, touchLists, flush, remove, upload, fetchMedia, removeMedia, backfill,
+    onError: f => { errHandler = f; }, onConflict: f => { conflictHandler = f; },
+    touch, touchLists, flush, remove, upload, fetchMedia, removeMedia, backfill,
     on: f => { subs.push(f); f(state, user); },
     get state() { return state; },
     get user() { return user; },

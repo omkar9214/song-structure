@@ -53,6 +53,30 @@ function saveLists() {
   if (window.Cloud && Cloud.touchLists) Cloud.touchLists();
 }
 
+/* ─── what each device last agreed with the server ──────────────
+   Sync used to be newest-wins on the whole song: edit on the laptop, edit the
+   same song later on the iPad, and the iPad's copy replaced the laptop's —
+   silently, whole. So each device remembers the version of each song it last
+   agreed with the server on. If both sides moved on from that point, the copy
+   on the device you are holding stays live and the other one is kept as its
+   own song. Nothing is ever thrown away. This map is per device and never
+   leaves it — it is not part of the song. */
+function base_of(id) { return state.syncBase ? state.syncBase[id] : undefined; }
+function set_base(id, stamp) { (state.syncBase = state.syncBase || {})[id] = stamp || 0; saveLocal(); }
+function forget_base(id) { if (state.syncBase) { delete state.syncBase[id]; saveLocal(); } }
+
+/* the other device's version, kept beside yours rather than thrown away */
+function keep_both(mine, remote) {
+  const copy = JSON.parse(JSON.stringify(remote));
+  copy.id = uid('s');
+  const when = new Date(remote.updated || Date.now())
+    .toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  copy.title = `${remote.title || 'Untitled'} (other device, ${when})`;
+  copy.updated = Date.now();
+  state.songs.push(copy);
+  return copy;
+}
+
 /* the cloud layer reads and writes the setlists through these three */
 function state_lists() { return state.setlists; }
 function state_lists_stamp() { return state.setlistsUpdated || 0; }
@@ -84,6 +108,7 @@ const barCount = sec => sec.bars.reduce((n, b) => n + spanOf(b), 0);
    information, so a bar with a single chord becomes a single big field. */
 function migrate(st) {
   if (!Array.isArray(st.setlists)) st.setlists = [];      /* added 2026-09 — never drops songs */
+  if (!st.syncBase || typeof st.syncBase !== 'object') st.syncBase = {};
   st.songs = st.songs.filter(so => !so.__setlists);       /* the synced setlists row is not a song */
   if (!st.songs.length) st.songs = [blankSong()];
   st.setlists.forEach(l => { if (!Array.isArray(l.songs)) l.songs = []; });
@@ -1330,6 +1355,14 @@ window.addEventListener('storage', e => {
 });
 
 Cloud.onError(m => toast(m));
+/* both devices changed the same song — say so plainly, and open the drawer so
+   the kept copy is right there rather than a mystery */
+Cloud.onConflict(titles => {
+  const one = titles.length === 1;
+  toast(one ? `That song was also changed on another device — both are kept`
+            : `${titles.length} songs were also changed on another device — both copies of each are kept`,
+        { label: 'Show', run: () => { showTab('songs'); $('#drawer').hidden = false; } });
+});
 Cloud.on((st, user) => {
   const btn = $('#btn-cloud');
   if (!btn) return;
@@ -1380,6 +1413,7 @@ function renderSongs() {
       state.setlists.forEach(l => { l.songs = (l.songs || []).filter(id => id !== s.id); });
       if (!state.songs.length) state.songs = [blankSong()];
       if (state.currentId === s.id) state.currentId = state.songs[0].id;
+      forget_base(s.id);
       if (Cloud.ready) Cloud.remove(s.id);
       if (inLists) saveLists();
       save(); render(); renderSongs();
@@ -1911,12 +1945,48 @@ $('#sheet-cancel').onclick = closeSheet;
 $('#sheet-scrim').onclick  = closeSheet;
 $('#btn-save').onclick     = saveNow;
 $('#btn-cloud').onclick    = cloudDialog;
+$('#btn-theme').onclick     = cycleTheme;
 $('#btn-account').onclick  = () => { closeDrawer(); cloudDialog(); };
 $('#btn-backup').onclick   = exportSong;
 $('#btn-restore').onclick  = () => $('#import-file').click();
 $('#import-file').onchange = e => { if (e.target.files[0]) importSong(e.target.files[0]); e.target.value = ''; };
 $('#viewer-close').onclick = closeViewer;
 $('#viewer').onclick = e => { if (e.target.id === 'viewer') closeViewer(); };
+
+/* ─── theme ─────────────────────────────────────────────────────
+   Three states, not two: a stage is dark, a rehearsal room is not, and the
+   device's own setting is right most of the time — so "System" stays, and the
+   choice is remembered per device. */
+const THEME_KEY = 'song-structure.theme';
+const THEMES = [
+  { id: 'system', icon: 'auto', label: 'System' },
+  { id: 'light',  icon: 'sun',  label: 'Light'  },
+  { id: 'dark',   icon: 'moon', label: 'Dark'   }
+];
+let theme = localStorage.getItem(THEME_KEY) || 'system';
+function applyTheme() {
+  const t = THEMES.find(x => x.id === theme) || THEMES[0];
+  if (t.id === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t.id);
+  localStorage.setItem(THEME_KEY, t.id);
+  /* the address bar / status bar follows the chart */
+  const meta = $('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', getComputedStyle(document.documentElement)
+    .getPropertyValue('--panel').trim() || '#1f5fb0');
+  const btn = $('#btn-theme');
+  if (btn) {
+    btn.innerHTML = '';
+    btn.append(icon(t.icon, 15), el('span', 'lbl', t.label));
+    btn.dataset.tip = `Theme: ${t.label} — click for ${(THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]).label}`;
+    btn.setAttribute('aria-label', btn.dataset.tip);
+  }
+}
+function cycleTheme() {
+  const i = THEMES.findIndex(x => x.id === theme);
+  theme = THEMES[(i + 1) % THEMES.length].id;
+  applyTheme();
+  toast(`Theme: ${(THEMES.find(x => x.id === theme) || THEMES[0]).label}`);
+}
 
 /* ─── offline ───────────────────────────────────────────────────
    A gig is the case this app has to survive: no signal, phone in airplane
@@ -1996,6 +2066,7 @@ document.addEventListener('keydown', e => {
 
 /* icons declared in the markup */
 document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.icon, 15)));
+applyTheme();
 $('#logo').appendChild(icon('music', 17));
 
 render();
