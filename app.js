@@ -59,7 +59,7 @@ function state_lists_stamp() { return state.setlistsUpdated || 0; }
 function take_lists(lists, stamp) {
   state.setlists = Array.isArray(lists) ? lists : [];
   state.setlists.forEach(l => { if (!Array.isArray(l.songs)) l.songs = []; });
-  state.setlistsUpdated = stamp || Date.now();
+  state.setlistsUpdated = Number(stamp) || 0;     /* never invent a stamp: it would outrank the server */
   if (!listById(state.currentListId)) state.currentListId = null;
 }
 
@@ -1985,6 +1985,9 @@ document.addEventListener('keydown', e => {
   }
   const typing = /input|textarea|select/i.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  /* a modal dialog sits in the top layer: opening another one under it, or
+     showModal() on one already open, both end badly */
+  if ($('dialog[open]') || !$('#sheet').hidden || !$('#viewer').hidden) return;
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); sectionDialog(); }
   if (e.key === 'g' || e.key === 'G') { e.preventDefault(); gigOn(); }
 });
