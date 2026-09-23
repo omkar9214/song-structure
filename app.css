@@ -426,7 +426,7 @@ body.gig-on{overflow:hidden}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .g-row{display:grid;background:var(--panel)}
 .g-bar{position:relative;min-height:calc(78px * var(--gs));border-left:1px solid var(--bar);
-  display:flex;flex-direction:column;justify-content:center;padding:14px 4px 16px}
+  display:flex;flex-direction:column;justify-content:center;padding:15px 4px 7px}
 .g-bar:first-child{border-left:none}
 .g-no{position:absolute;top:3px;left:6px;font-family:var(--mono);font-size:calc(10px * var(--gs));color:var(--muted)}
 .g-chords{display:grid;place-items:center;gap:2px}
@@ -434,8 +434,9 @@ body.gig-on{overflow:hidden}
 .g-ch{font-size:calc(32px * var(--gs));font-weight:600;letter-spacing:-.03em;line-height:1.1;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .g-chords.split .g-ch{font-size:calc(20px * var(--gs))}
-.g-lyric{position:absolute;left:5px;right:5px;bottom:3px;text-align:center;font-size:calc(11.5px * var(--gs));
-  font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* the cue wraps rather than truncating — on stage a half-read cue is no cue */
+.g-lyric{margin-top:5px;text-align:center;font-size:calc(11.5px * var(--gs));line-height:1.3;
+  font-weight:600;color:var(--ink-2);overflow-wrap:anywhere}
 
 @media(max-width:720px){
   .g-row{grid-template-columns:repeat(2,1fr)!important}
@@ -465,6 +466,8 @@ body.gig-on{overflow:hidden}
   .m-lyric:placeholder-shown{border-bottom:1px dotted var(--line)}
   .m-lyric:focus{border-bottom-color:transparent}
   .ibtn,.m-grip{width:36px;height:34px}
+  .tab{padding:11px 10px}
+  .list-go{padding:9px 12px}
   .micon{width:30px;height:30px}
   .barline-btn,.barline-add{width:28px;height:28px}
   .region{height:40px}
@@ -529,8 +532,8 @@ body.gig-on{overflow:hidden}
 
 /* ── print ──────────────────────────────────────────────── */
 @media print{
-  .topbar,.m-tools,.r-tools,.m-more,.r-more,.add-cell,.barline-btn,.barline-add,.add-section-row,
-  .drawer,.viewer,.toast,.tip,.gig{display:none!important}
+  .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.barline-btn,.barline-add,.add-section-row,
+  .drawer,.viewer,.toast,.tip,.gig,.sheet-menu{display:none!important}
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}
   .sect{break-inside:avoid}

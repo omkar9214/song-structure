@@ -111,6 +111,18 @@ const Cloud = (() => {
   /* ── songs ──────────────────────────────────────────────────── */
   const stamp = so => so.updated || 0;
 
+  /* Setlists have no table of their own, and adding one would mean asking a
+     musician to run SQL before a gig. They ride in the songs table instead,
+     as a single row marked __setlists — filtered out of the song list at both
+     ends, and shaped like an empty song so an out-of-date client shows a
+     harmless blank row rather than falling over. */
+  const LIST_ROW = '__setlists';
+  const isListRow = d => !!(d && d.__setlists);
+  function listPayload() {
+    return { id: LIST_ROW, __setlists: true, title: '', artist: '', key: '', bpm: '', time: '4/4',
+             sections: [], media: [], setlists: state_lists(), updated: state_lists_stamp() };
+  }
+
   async function syncAll() {
     if (!user) return;
     set('syncing');
@@ -123,11 +135,17 @@ const Cloud = (() => {
       let changed = false;
 
       /* remote → local */
+      let remoteLists = null;
       for (const row of rows || []) {
-        const mine = byId[row.id];
         const remote = row.data;
+        if (isListRow(remote)) { remoteLists = remote; continue; }
+        const mine = byId[row.id];
         if (!mine) { local.push(remote); changed = true; }
         else if (stamp(remote) > stamp(mine)) { Object.assign(mine, remote); changed = true; }
+      }
+      if (remoteLists && stamp(remoteLists) > state_lists_stamp()) {
+        take_lists(remoteLists.setlists || [], stamp(remoteLists));
+        changed = true;
       }
 
       /* local → remote (anything missing there, or newer here) */
@@ -137,6 +155,9 @@ const Cloud = (() => {
         return !r || stamp(s) > stamp(r);
       });
       if (up.length) await upsert(up);
+      if (!remoteLists || state_lists_stamp() > stamp(remoteLists)) {
+        if (state_lists().length || remoteLists) await upsert([listPayload()]);
+      }
 
       if (changed) onPulled();
       set('ok');
@@ -163,10 +184,20 @@ const Cloud = (() => {
     clearTimeout(timer);
     timer = setTimeout(flush, 1500);
   }
+  /* the same batching, for the setlists row */
+  let listsDirty = false;
+  function touchLists() {
+    if (!user) return;
+    listsDirty = true;
+    set('pending');
+    clearTimeout(timer);
+    timer = setTimeout(flush, 1500);
+  }
   async function flush() {
-    if (!user || !pending.size) return;
+    if (!user || (!pending.size && !listsDirty)) return;
     const ids = [...pending]; pending.clear();
     const songs = state_songs().filter(s => ids.includes(s.id));
+    if (listsDirty) { songs.push(listPayload()); listsDirty = false; }
     if (!songs.length) return set('ok');
     set('syncing');
     try { await upsert(songs); set('ok'); }
@@ -231,7 +262,7 @@ const Cloud = (() => {
 
   return {
     init, signIn, signInPassword, signUpPassword, setPassword, signOut, verifyCode, refresh, syncAll,
-    onError: f => { errHandler = f; }, touch, flush, remove, upload, fetchMedia, removeMedia, backfill,
+    onError: f => { errHandler = f; }, touch, touchLists, flush, remove, upload, fetchMedia, removeMedia, backfill,
     on: f => { subs.push(f); f(state, user); },
     get state() { return state; },
     get user() { return user; },

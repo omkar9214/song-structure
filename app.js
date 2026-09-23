@@ -45,15 +45,31 @@ function save(quiet) {
 }
 
 /* Setlists live beside the songs in the same record. They are written with
-   this, not save(): editing a setlist must not restamp the open song. */
+   saveLists(), not save(): editing a setlist must not restamp the open song. */
 function saveLocal() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function saveLists() {
+  state.setlistsUpdated = Date.now();
+  saveLocal();
+  if (window.Cloud && Cloud.touchLists) Cloud.touchLists();
+}
+
+/* the cloud layer reads and writes the setlists through these three */
+function state_lists() { return state.setlists; }
+function state_lists_stamp() { return state.setlistsUpdated || 0; }
+function take_lists(lists, stamp) {
+  state.setlists = Array.isArray(lists) ? lists : [];
+  state.setlists.forEach(l => { if (!Array.isArray(l.songs)) l.songs = []; });
+  state.setlistsUpdated = stamp || Date.now();
+  if (!listById(state.currentListId)) state.currentListId = null;
+}
 
 /* the cloud layer reads and writes through these two */
 function state_songs() { return state.songs; }
 function onPulled() {
   localStorage.setItem(KEY, JSON.stringify(state));
   render();
-  if (!$('#drawer').hidden) renderSongs();
+  if (!$('#drawer').hidden) showTab(drawerTab);
+  if (typeof gigIsOn === 'function' && gigIsOn()) renderGig();
 }
 const song = () => state.songs.find(s => s.id === state.currentId) || state.songs[0];
 const beatsPerBar = () => parseInt(song().time.split('/')[0], 10) || 4;
@@ -68,6 +84,8 @@ const barCount = sec => sec.bars.reduce((n, b) => n + spanOf(b), 0);
    information, so a bar with a single chord becomes a single big field. */
 function migrate(st) {
   if (!Array.isArray(st.setlists)) st.setlists = [];      /* added 2026-09 — never drops songs */
+  st.songs = st.songs.filter(so => !so.__setlists);       /* the synced setlists row is not a song */
+  if (!st.songs.length) st.songs = [blankSong()];
   st.setlists.forEach(l => { if (!Array.isArray(l.songs)) l.songs = []; });
   st.songs.forEach(so => (so.sections || []).forEach(sec => sec.bars.forEach(b => {
     if (b.span == null) b.span = 1;
@@ -1293,7 +1311,7 @@ function paintCloud(awaitingCode) {
 let fitTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(fitTimer);
-  fitTimer = setTimeout(fitAllChords, 120);
+  fitTimer = setTimeout(() => { fitAllChords(); if (gigIsOn()) fitGigChords(); }, 120);
 });
 
 window.addEventListener('storage', e => {
@@ -1357,11 +1375,13 @@ function renderSongs() {
     row.onclick = () => { state.currentId = s.id; save(); render(); renderSongs(); closeDrawer(); };
     row.appendChild(tool('trash', 'Delete this song', async () => {
       if (!await ask(`"${s.title || 'Untitled'}" will be removed, along with anything attached to it.`)) return;
+      const inLists = state.setlists.some(l => (l.songs || []).includes(s.id));
       state.songs = state.songs.filter(x => x.id !== s.id);
       state.setlists.forEach(l => { l.songs = (l.songs || []).filter(id => id !== s.id); });
       if (!state.songs.length) state.songs = [blankSong()];
       if (state.currentId === s.id) state.currentId = state.songs[0].id;
       if (Cloud.ready) Cloud.remove(s.id);
+      if (inLists) saveLists();
       save(); render(); renderSongs();
     }, 'danger'));
     host.appendChild(row);
@@ -1399,7 +1419,7 @@ function listDialog(existing) {
     if (listEdit) { listEdit.name = name; listEdit.note = note; }
     else { const l = newList(name, note); state.setlists.push(l); openList = l.id; }
     listEdit = null;
-    saveLocal(); d.close(); renderLists();
+    saveLists(); d.close(); renderLists();
   };
   d.querySelector('[data-close]').onclick = () => { listEdit = null; d.close(); };
   d.showModal();
@@ -1454,7 +1474,7 @@ function renderLists() {
         if (!await ask(`The setlist "${l.name}" will be removed. The songs in it stay.`)) return;
         state.setlists = state.setlists.filter(x => x.id !== l.id);
         if (state.currentListId === l.id) state.currentListId = null;
-        saveLocal(); renderLists();
+        saveLists(); renderLists();
       }, 'danger'));
     box.appendChild(head);
 
@@ -1474,7 +1494,7 @@ function renderLists() {
           tool('up', 'Move up the running order', () => moveInList(l, i, -1)),
           tool('down', 'Move down the running order', () => moveInList(l, i, 1)),
           tool('x', 'Take this song out of the setlist', () => {
-            l.songs.splice(l.songs.indexOf(so.id), 1); saveLocal(); renderLists();
+            l.songs.splice(l.songs.indexOf(so.id), 1); saveLists(); renderLists();
           }));
         row.appendChild(tools);
         body.appendChild(row);
@@ -1493,7 +1513,7 @@ function renderLists() {
         sel.onchange = () => {
           if (!sel.value) return;
           l.songs.push(sel.value); l.updated = Date.now();
-          saveLocal(); renderLists();
+          saveLists(); renderLists();
         };
         pick.appendChild(sel);
         body.appendChild(pick);
@@ -1509,7 +1529,7 @@ function moveInList(l, i, d) {
   const j = i + d;
   if (j < 0 || j >= l.songs.length) return;
   [l.songs[i], l.songs[j]] = [l.songs[j], l.songs[i]];
-  l.updated = Date.now(); saveLocal(); renderLists();
+  l.updated = Date.now(); saveLists(); renderLists();
 }
 function openSong(id) {
   if (!songById(id)) return;
@@ -1588,6 +1608,7 @@ function applyGigScale() {
   gigScale = Math.round(Math.min(1.8, Math.max(0.7, gigScale)) * 100) / 100;
   $('#gig').style.setProperty('--gs', gigScale);
   localStorage.setItem(GIG_SCALE, String(gigScale));
+  if (gigIsOn()) fitGigChords();
 }
 function gigStep(d) {
   const l = listById(state.currentListId);
@@ -1644,7 +1665,7 @@ function renderGig() {
   const pos = $('#gig-pos');
   pos.innerHTML = '';
   if (inList) {
-    pos.append(el('span', 'gp-name', l.name), el('span', 'gp-n', `${i + 1}/${songs.length}`));
+    pos.append(el('span', 'gp-name', l.name + '  \u00b7'), el('span', 'gp-n', `${i + 1}/${songs.length}`));
     pos.setAttribute('aria-label', `${l.name}, song ${i + 1} of ${songs.length} — jump to another`);
   }
   $('#gig-pos').hidden = !inList;
@@ -1665,6 +1686,26 @@ function renderGig() {
   s.sections.forEach(sec => {
     host.appendChild(gigSection(sec, barNo));
     barNo += barCount(sec);
+  });
+  fitGigChords();
+}
+
+/* Same idea as the editor's fitChord: "Cmaj7#11/G" must shrink to fit its bar
+   rather than be cut off, and that has to hold at every A+ step. */
+function fitGigChords() {
+  document.querySelectorAll('#gig-body .g-ch').forEach(n => {
+    n.style.fontSize = '';
+    const txt = n.textContent;
+    if (!txt) return;
+    const cell = n.closest('.g-bar');
+    const fields = n.parentElement.children.length;
+    const avail = (cell.clientWidth - 10) / fields - 4;
+    if (avail <= 0) return;
+    const cs = getComputedStyle(n);
+    const base = parseFloat(cs.fontSize);
+    fitCtx.font = `${cs.fontWeight} ${base}px ${cs.fontFamily}`;
+    const w = fitCtx.measureText(txt).width;
+    if (w > avail) n.style.fontSize = Math.max(11, base * avail / w).toFixed(1) + 'px';
   });
 }
 
