@@ -44,6 +44,10 @@ function save(quiet) {
   if (!quiet && window.Cloud) Cloud.touch(song());
 }
 
+/* Setlists live beside the songs in the same record. They are written with
+   this, not save(): editing a setlist must not restamp the open song. */
+function saveLocal() { localStorage.setItem(KEY, JSON.stringify(state)); }
+
 /* the cloud layer reads and writes through these two */
 function state_songs() { return state.songs; }
 function onPulled() {
@@ -63,6 +67,8 @@ const barCount = sec => sec.bars.reduce((n, b) => n + spanOf(b), 0);
 /* Older songs stored one slot per beat; keep the slots only where they carry
    information, so a bar with a single chord becomes a single big field. */
 function migrate(st) {
+  if (!Array.isArray(st.setlists)) st.setlists = [];      /* added 2026-09 — never drops songs */
+  st.setlists.forEach(l => { if (!Array.isArray(l.songs)) l.songs = []; });
   st.songs.forEach(so => (so.sections || []).forEach(sec => sec.bars.forEach(b => {
     if (b.span == null) b.span = 1;
     delete b.split;
@@ -363,13 +369,8 @@ function renderSection(sec, idx, startBar) {
 /* marker lane — cues sitting above the block that contains their bar */
 function markerLane(sec, row) {
   if (!row.items.length) return null;
-  const from = row.items[0].no, to = row.items[row.items.length - 1].no + row.items[row.items.length - 1].span - 1;
-  const secStart = row.items[0].no - row.items[0].i === 0 ? 0 : 0;  /* cue.bar is 1-based within the region */
-  const base = row.items[0].no - cueOffset(sec, row.items[0].i);
-  const inRow = (sec.cues || []).filter(c => {
-    const abs = base + c.bar - 1;
-    return abs >= from && abs <= to;
-  });
+  const base = row.items[0].no - cueOffset(sec, row.items[0].i);   /* cue.bar is 1-based per region */
+  const inRow = rowCues(sec, row);
   if (!inRow.length) return null;
 
   const lane = el('div', 'markers');
@@ -390,6 +391,18 @@ function markerLane(sec, row) {
   });
   return lane;
 }
+/* which cues land in this row, and which column each one sits over */
+function rowCues(sec, row) {
+  if (!row.items.length) return [];
+  const last = row.items[row.items.length - 1];
+  const from = row.items[0].no, to = last.no + last.span - 1;
+  const base = row.items[0].no - cueOffset(sec, row.items[0].i);
+  return (sec.cues || []).filter(c => {
+    const abs = base + c.bar - 1;
+    return abs >= from && abs <= to;
+  });
+}
+
 /* bars of time before block index i, so cue numbers stay 1-based per region */
 function cueOffset(sec, i) { return sec.bars.slice(0, i).reduce((n, b) => n + spanOf(b), 0); }
 
@@ -430,26 +443,28 @@ function regionStrip(sec, idx) {
   const right = el('div', 'r-right');
   {
     (sec.media || []).forEach(m => right.appendChild(mediaIcon(m, sec)));
-    const tools = el('div', 'r-tools');
-    tools.append(
-      tool('repeat', 'Set repeat count — how many times this region is played', () => setRepeat(sec)),
-      tool('pin', 'Add a pointer above the bars (vocal starts, drums enter…)', () => cueDialog(sec)),
-      tool('clip', 'Attach a clip of the song, or a file, to this region', () => attachTo(sec, `the ${sec.name || 'region'} region`)),
-      tool('plus', 'Add one more bar to this region', () => { sec.bars.push(newBar()); save(); render(); }),
-      tool('paint', 'Change the region colour', () => { sec.color = COLORS[(COLORS.indexOf(sec.color) + 1) % COLORS.length]; save(); render(); }),
-      tool('up', 'Move this region earlier in the song', () => moveSection(idx, -1)),
-      tool('down', 'Move this region later in the song', () => moveSection(idx, 1)),
-      tool('copy', 'Duplicate this region with all its bars', () => {
+    const acts = [
+      { icon: 'repeat', label: 'Repeat count',        tip: 'Set repeat count — how many times this region is played', run: () => setRepeat(sec) },
+      { icon: 'pin',    label: 'Add a pointer / cue', tip: 'Add a pointer above the bars (vocal starts, drums enter…)', run: () => cueDialog(sec) },
+      { icon: 'clip',   label: 'Attach a clip or file', tip: 'Attach a clip of the song, or a file, to this region', run: () => attachTo(sec, `the ${sec.name || 'region'} region`) },
+      { icon: 'plus',   label: 'Add one more bar',    tip: 'Add one more bar to this region', run: () => { sec.bars.push(newBar()); save(); render(); } },
+      { icon: 'paint',  label: 'Change the colour',   tip: 'Change the region colour', run: () => { sec.color = COLORS[(COLORS.indexOf(sec.color) + 1) % COLORS.length]; save(); render(); } },
+      { icon: 'up',     label: 'Move region earlier', tip: 'Move this region earlier in the song', run: () => moveSection(idx, -1) },
+      { icon: 'down',   label: 'Move region later',   tip: 'Move this region later in the song', run: () => moveSection(idx, 1) },
+      { icon: 'copy',   label: 'Duplicate the region', tip: 'Duplicate this region with all its bars', run: () => {
         const copy = JSON.parse(JSON.stringify(sec));
         copy.id = uid('x'); copy.bars.forEach(b => b.id = uid('b')); copy.cues.forEach(c => c.id = uid('c'));
         song().sections.splice(idx + 1, 0, copy); save(); render();
-      }),
-      tool('trash', 'Delete this region', async () => {
+      } },
+      { icon: 'trash',  label: 'Delete the region',   tip: 'Delete this region', danger: true, run: async () => {
         if (!await ask(`"${sec.name}" and its ${barCount(sec)} bars will be removed.`)) return;
         song().sections.splice(idx, 1); save(); render();
-      }, 'danger')
-    );
+      } }
+    ];
+    const tools = el('div', 'r-tools');
+    acts.forEach(a => tools.appendChild(tool(a.icon, a.tip, a.run, a.danger ? 'danger' : '')));
     right.appendChild(tools);
+    right.appendChild(sheetButton(`${sec.name || 'Region'}`, acts, 'r-more'));
   }
   r.appendChild(right);
   return r;
@@ -496,9 +511,11 @@ function measure(sec, it, firstInRow) {
     : `Bar ${no}`;
 
   /* remove the barline on this block's left edge → join it to the previous one */
+  let canJoin = false;
   if (!firstInRow && i > 0) {
     const prev = sec.bars[i - 1];
     if (spanOf(prev) + span <= PER_ROW) {
+      canJoin = true;
       const b = el('button', 'barline-btn');
       b.type = 'button';
       b.appendChild(icon('x', 11));
@@ -525,30 +542,48 @@ function measure(sec, it, firstInRow) {
   chords.style.setProperty('--beats', fields);
   bar.beats.forEach((v, bi) => chords.appendChild(beatInput(bar, bi, m, chords, fields === 1)));
 
-  const tools = el('div', 'm-tools');
-  tools.append(
-    moveHandle(sec, i, m, name),
-    tool('columns', `${fields} chord field${fields === 1 ? '' : 's'} in this block \u2014 click for ${nextFields(fields, span)}`,
-      () => setFields(bar, nextFields(fields, span))),
-    tool('copy', 'Duplicate this block', () => {
+  const acts = [
+    { icon: 'columns', label: `Use ${nextFields(fields, span)} chord field${nextFields(fields, span) === 1 ? '' : 's'}`,
+      tip: `${fields} chord field${fields === 1 ? '' : 's'} in this block \u2014 click for ${nextFields(fields, span)}`,
+      run: () => setFields(bar, nextFields(fields, span)) },
+    { icon: 'copy', label: 'Duplicate this block', tip: 'Duplicate this block', run: () => {
       const copy = JSON.parse(JSON.stringify(bar)); copy.id = uid('b');
       sec.bars.splice(i + 1, 0, copy); save(); render();
-    }),
-    tool('clip', 'Attach a clip of the song, or a file, to this block', () => attachTo(bar, name)),
-    tool('trash', span > 1 ? 'Delete this block' : 'Delete this bar', () => { sec.bars.splice(i, 1); save(); render(); }, 'danger')
-  );
+    } },
+    { icon: 'clip', label: 'Attach a clip or file', tip: 'Attach a clip of the song, or a file, to this block', run: () => attachTo(bar, name) },
+    { icon: 'trash', label: span > 1 ? 'Delete this block' : 'Delete this bar', tip: span > 1 ? 'Delete this block' : 'Delete this bar',
+      danger: true, run: async () => {
+        const written = bar.beats.some(Boolean) || bar.lyric || (bar.media || []).length;
+        if (written && !await ask(`${name.charAt(0).toUpperCase() + name.slice(1)} and what is written in it will be removed.`)) return;
+        sec.bars.splice(i, 1); save(); render();
+      } }
+  ];
+  const tools = el('div', 'm-tools');
+  acts.forEach(a => tools.appendChild(tool(a.icon, a.tip, a.run, a.danger ? 'danger' : '')));
 
   const lyric = el('input', 'm-lyric');
   lyric.value = bar.lyric || ''; lyric.placeholder = '\u2026'; lyric.spellcheck = false;
   lyric.setAttribute('aria-label', `Lyric or cue under bar ${no}`);
   lyric.dataset.tip = 'A lyric or short cue for this bar';
-  lyric.oninput = () => { bar.lyric = lyric.value; save(); };
+  lyric.oninput = () => { bar.lyric = lyric.value; lyric.classList.toggle('has', !!lyric.value); save(); };
   if (bar.lyric) lyric.classList.add('has');
 
   const icons = el('div', 'm-icons');
   (bar.media || []).forEach(md => icons.appendChild(mediaIcon(md, bar)));
 
-  m.append(num, tools, chords, lyric, icons);
+  /* the floating barline circles are a pointer affordance; on touch the same
+     two actions live in the sheet, where they cannot be hit by accident */
+  const sheetActs = acts.slice(0, -1);
+  sheetActs.push(
+    { icon: 'caretLeft',  label: 'Move this block earlier', run: () => nudge(sec, i, -1) },
+    { icon: 'caretRight', label: 'Move this block later',   run: () => nudge(sec, i, 1) });
+  if (canJoin) sheetActs.push({ icon: 'x', label: `Join with bar ${no - spanOf(sec.bars[i - 1])}`, run: () => mergeBars(sec, i - 1) });
+  if (span > 1) sheetActs.push({ icon: 'plus', label: 'Put the barline back', run: () => splitBar(sec, i) });
+  sheetActs.push(acts[acts.length - 1]);
+
+  m.append(num, tools, chords, lyric, icons,
+           moveHandle(sec, i, m, name),
+           sheetButton(name.charAt(0).toUpperCase() + name.slice(1), sheetActs, 'm-more'));
 
   return m;
 }
@@ -755,6 +790,47 @@ function step(node, dir) {
   const nxt = all[all.indexOf(node) + dir];
   if (nxt) nxt.querySelector('.beat')[dir > 0 ? 'focus' : 'focus']();
 }
+
+/* On a touch screen there is no hover, and Safari fires :hover on a tap — so
+   the tool row used to spring open over the block the moment you tried to type
+   in it. Touch gets a ⋯ that opens a proper sheet instead: labelled actions,
+   thumb-sized, anchored to the bottom of the screen, nothing over the chart. */
+function sheetButton(title, acts, cls) {
+  const b = el('button', cls);
+  b.type = 'button';
+  b.appendChild(icon('more', 15));
+  b.dataset.tip = `More for ${title.toLowerCase()}`;
+  b.setAttribute('aria-label', `More for ${title.toLowerCase()}`);
+  b.setAttribute('aria-haspopup', 'dialog');
+  b.onpointerdown = e => e.preventDefault();       /* never steal focus from a field */
+  b.onclick = e => { e.stopPropagation(); e.preventDefault(); openSheet(title, acts); };
+  return b;
+}
+let sheetBack = null;
+function openSheet(title, acts) {
+  const host = $('#sheet-items');
+  host.innerHTML = '';
+  $('#sheet-title').textContent = title;
+  acts.forEach(a => {
+    const row = el('button', 'sheet-row' + (a.danger ? ' danger' : ''));
+    row.type = 'button';
+    row.append(icon(a.icon, 17), el('span', null, a.label));
+    row.onclick = () => { closeSheet(); a.run(); };
+    host.appendChild(row);
+  });
+  sheetBack = document.activeElement;
+  $('#sheet').hidden = false;
+  document.body.classList.add('sheet-on');
+  host.firstChild && host.firstChild.focus({ preventScroll: true });
+}
+function closeSheet() {
+  if ($('#sheet').hidden) return;
+  $('#sheet').hidden = true;
+  document.body.classList.remove('sheet-on');
+  if (sheetBack && sheetBack.isConnected) sheetBack.focus({ preventScroll: true });
+  sheetBack = null;
+}
+const closeTools = closeSheet;               /* one thing to close, from anywhere */
 
 function tool(name, tip, fn, extra) {
   const b = el('button', 'ibtn' + (extra ? ' ' + extra : ''));
@@ -1282,6 +1358,7 @@ function renderSongs() {
     row.appendChild(tool('trash', 'Delete this song', async () => {
       if (!await ask(`"${s.title || 'Untitled'}" will be removed, along with anything attached to it.`)) return;
       state.songs = state.songs.filter(x => x.id !== s.id);
+      state.setlists.forEach(l => { l.songs = (l.songs || []).filter(id => id !== s.id); });
       if (!state.songs.length) state.songs = [blankSong()];
       if (state.currentId === s.id) state.currentId = state.songs[0].id;
       if (Cloud.ready) Cloud.remove(s.id);
@@ -1290,8 +1367,355 @@ function renderSongs() {
     host.appendChild(row);
   });
 }
-const openDrawer  = () => { renderSongs(); $('#drawer').hidden = false; };
+let drawerTab = 'songs';
+const openDrawer  = () => { showTab(drawerTab); $('#drawer').hidden = false; };
 const closeDrawer = () => { $('#drawer').hidden = true; };
+
+/* ─── setlists ──────────────────────────────────────────────────
+   A setlist is a named, ordered list of song ids — a gig. It holds ids, not
+   copies, so editing a song edits it everywhere, and deleting a song only
+   removes it from the running order. Setlists are local to this device:
+   the cloud has a table for songs and nothing else, so they are written
+   with saveLocal() and never restamp the open song. */
+const listById  = id => state.setlists.find(l => l.id === id);
+const songById  = id => state.songs.find(s => s.id === id);
+const listSongs = l => (l.songs || []).map(songById).filter(Boolean);
+
+function newList(name, note) {
+  return { id: uid('l'), name: name || 'Setlist', note: note || '', songs: [], updated: Date.now() };
+}
+let listEdit = null;                        /* the setlist being renamed, if any */
+function listDialog(existing) {
+  const d = $('#dlg-list');
+  listEdit = existing || null;
+  $('#list-title').textContent = existing ? 'Rename setlist' : 'New setlist';
+  $('#list-name').value = existing ? existing.name : '';
+  $('#list-note').value = existing ? (existing.note || '') : '';
+  $('#list-save').textContent = existing ? 'Save' : 'Create setlist';
+  $('#list-save').onclick = () => {
+    const name = $('#list-name').value.trim();
+    if (!name) { $('#list-name').focus(); return; }
+    const note = $('#list-note').value.trim();
+    if (listEdit) { listEdit.name = name; listEdit.note = note; }
+    else { const l = newList(name, note); state.setlists.push(l); openList = l.id; }
+    listEdit = null;
+    saveLocal(); d.close(); renderLists();
+  };
+  d.querySelector('[data-close]').onclick = () => { listEdit = null; d.close(); };
+  d.showModal();
+  setTimeout(() => $('#list-name').select(), 30);
+}
+
+let openList = null;                        /* which setlist is expanded in the drawer */
+function renderLists() {
+  const host = $('#list-pane');
+  host.innerHTML = '';
+
+  const add = el('button', 'btn primary big list-new');
+  add.type = 'button';
+  add.append(icon('plus', 15), el('span', null, 'New setlist'));
+  add.onclick = () => listDialog();
+  host.appendChild(add);
+
+  if (!state.setlists.length) {
+    host.appendChild(el('p', 'list-empty',
+      'A setlist is one gig: the songs you are playing, in order. Build one here and Gig mode walks it with ‹ and ›.'));
+    return;
+  }
+
+  state.setlists.forEach(l => {
+    const songs = listSongs(l);
+    const box = el('div', 'list-box' + (openList === l.id ? ' open' : ''));
+
+    const head = el('div', 'list-head');
+    const caret = el('button', 'ibtn');
+    caret.type = 'button';
+    caret.appendChild(icon(openList === l.id ? 'caretDown' : 'caretRight', 14));
+    caret.setAttribute('aria-label', (openList === l.id ? 'Collapse ' : 'Expand ') + l.name);
+    caret.setAttribute('aria-expanded', String(openList === l.id));
+    caret.onclick = () => { openList = openList === l.id ? null : l.id; renderLists(); };
+
+    const main = el('div', 'list-main');
+    main.append(el('div', 'list-name', l.name));
+    main.append(el('div', 'list-sub',
+      `${songs.length} song${songs.length === 1 ? '' : 's'}${l.note ? ' · ' + l.note : ''}`));
+    main.onclick = caret.onclick;
+
+    const go = el('button', 'btn list-go');
+    go.type = 'button';
+    go.append(icon('play', 14), el('span', null, 'Start'));
+    go.dataset.tip = 'Open the first song in Gig mode and walk the setlist from there';
+    go.disabled = !songs.length;
+    go.onclick = () => startList(l);
+
+    head.append(caret, main, go,
+      tool('save', 'Rename this setlist', () => listDialog(l)),
+      tool('trash', 'Delete this setlist', async () => {
+        if (!await ask(`The setlist "${l.name}" will be removed. The songs in it stay.`)) return;
+        state.setlists = state.setlists.filter(x => x.id !== l.id);
+        if (state.currentListId === l.id) state.currentListId = null;
+        saveLocal(); renderLists();
+      }, 'danger'));
+    box.appendChild(head);
+
+    if (openList === l.id) {
+      const body = el('div', 'list-body');
+      songs.forEach((so, i) => {
+        const row = el('div', 'list-song' + (so.id === state.currentId ? ' on' : ''));
+        row.append(el('span', 'ls-no', String(i + 1)));
+        const t = el('div', 'ls-main');
+        t.append(el('div', 'ls-title', so.title || 'Untitled'));
+        const bars = so.sections.reduce((n, x) => n + barCount(x), 0);
+        t.append(el('div', 'ls-sub', `${so.sections.length} regions · ${bars} bars${so.key ? ' · ' + so.key : ''}`));
+        t.onclick = () => { state.currentListId = l.id; openSong(so.id); closeDrawer(); };
+        row.appendChild(t);
+        const tools = el('div', 'ls-tools');
+        tools.append(
+          tool('up', 'Move up the running order', () => moveInList(l, i, -1)),
+          tool('down', 'Move down the running order', () => moveInList(l, i, 1)),
+          tool('x', 'Take this song out of the setlist', () => {
+            l.songs.splice(l.songs.indexOf(so.id), 1); saveLocal(); renderLists();
+          }));
+        row.appendChild(tools);
+        body.appendChild(row);
+      });
+
+      const rest = state.songs.filter(so => !(l.songs || []).includes(so.id));
+      if (rest.length) {
+        const pick = el('div', 'list-add');
+        const sel = el('select', 'list-select');
+        sel.setAttribute('aria-label', `Add a song to ${l.name}`);
+        sel.appendChild(el('option', null, 'Add a song…'));
+        rest.forEach(so => {
+          const o = el('option', null, so.title || 'Untitled');
+          o.value = so.id; sel.appendChild(o);
+        });
+        sel.onchange = () => {
+          if (!sel.value) return;
+          l.songs.push(sel.value); l.updated = Date.now();
+          saveLocal(); renderLists();
+        };
+        pick.appendChild(sel);
+        body.appendChild(pick);
+      } else if (!songs.length) {
+        body.appendChild(el('p', 'list-empty', 'No songs yet — add one below.'));
+      }
+      box.appendChild(body);
+    }
+    host.appendChild(box);
+  });
+}
+function moveInList(l, i, d) {
+  const j = i + d;
+  if (j < 0 || j >= l.songs.length) return;
+  [l.songs[i], l.songs[j]] = [l.songs[j], l.songs[i]];
+  l.updated = Date.now(); saveLocal(); renderLists();
+}
+function openSong(id) {
+  if (!songById(id)) return;
+  state.currentId = id; saveLocal(); render(); renderSongs();
+}
+function startList(l) {
+  const songs = listSongs(l);
+  if (!songs.length) return;
+  state.currentListId = l.id;
+  openSong(songs[0].id);
+  closeDrawer();
+  gigOn();
+}
+
+/* drawer tabs */
+function showTab(which) {
+  const songs = which === 'songs';
+  $('#song-list').hidden = !songs;
+  $('#list-pane').hidden = songs;
+  $('#tab-songs').classList.toggle('on', songs);
+  $('#tab-lists').classList.toggle('on', !songs);
+  $('#tab-songs').setAttribute('aria-selected', String(songs));
+  $('#tab-lists').setAttribute('aria-selected', String(!songs));
+  $('#drawer-title').textContent = songs ? 'Songs' : 'Setlists';
+  drawerTab = which;
+  if (songs) renderSongs(); else renderLists();
+}
+
+/* ─── gig mode ──────────────────────────────────────────────────
+   A second, read-only rendering of the song: no inputs, no tools, no
+   dialogs — nothing that a sleeve can knock out of place mid-song. Every
+   cue is on, including the line under each bar. It reads from the same
+   state, so it works with no signal like the rest of the app. */
+let wakeLock = null;
+const GIG_SCALE = 'song-structure.gigScale';
+let gigScale = parseFloat(localStorage.getItem(GIG_SCALE)) || 1;
+
+const gigIsOn = () => !$('#gig').hidden;
+
+function gigOn() {
+  closeTools();
+  /* If you walked in from the top bar, put yourself in whichever setlist has
+     this song, so ‹ and › work without going back to the drawer first. */
+  const cur = listById(state.currentListId);
+  if (!cur || !(cur.songs || []).includes(state.currentId)) {
+    const found = state.setlists.find(l => (l.songs || []).includes(state.currentId));
+    state.currentListId = found ? found.id : null;
+  }
+  if (!$('#drawer').hidden) closeDrawer();
+  $('#gig').hidden = false;
+  document.body.classList.add('gig-on');
+  applyGigScale();
+  renderGig();
+  keepAwake();
+  $('#gig-body').scrollTop = 0;
+  $('#gig-close').focus({ preventScroll: true });
+}
+function gigOff() {
+  closeJump();
+  $('#gig').hidden = true;
+  document.body.classList.remove('gig-on');
+  releaseWake();
+  $('#btn-gig').focus({ preventScroll: true });
+}
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+}
+function releaseWake() {
+  try { if (wakeLock) wakeLock.release(); } catch (_) {}
+  wakeLock = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && gigIsOn()) keepAwake(); else if (!gigIsOn()) releaseWake();
+});
+function applyGigScale() {
+  gigScale = Math.round(Math.min(1.8, Math.max(0.7, gigScale)) * 100) / 100;
+  $('#gig').style.setProperty('--gs', gigScale);
+  localStorage.setItem(GIG_SCALE, String(gigScale));
+}
+function gigStep(d) {
+  const l = listById(state.currentListId);
+  if (!l) return;
+  const songs = listSongs(l);
+  const i = songs.findIndex(x => x.id === state.currentId);
+  const nxt = songs[i + d];
+  if (!nxt) return;
+  openSong(nxt.id);
+  renderGig();
+  $('#gig-body').scrollTop = 0;
+}
+
+/* tap the setlist name to jump straight to another song in it */
+function toggleJump() {
+  const panel = $('#gig-jump');
+  if (!panel.hidden) return closeJump();
+  const l = listById(state.currentListId);
+  if (!l) return;
+  panel.innerHTML = '';
+  listSongs(l).forEach((so, n) => {
+    const b = el('button', 'gj-row' + (so.id === state.currentId ? ' on' : ''));
+    b.type = 'button';
+    b.append(el('span', 'gj-no', String(n + 1)), el('span', 'gj-title', so.title || 'Untitled'));
+    b.onclick = () => { closeJump(); openSong(so.id); renderGig(); $('#gig-body').scrollTop = 0; };
+    panel.appendChild(b);
+  });
+  panel.hidden = false;
+  $('#gig-pos').setAttribute('aria-expanded', 'true');
+}
+function closeJump() {
+  $('#gig-jump').hidden = true;
+  $('#gig-pos').setAttribute('aria-expanded', 'false');
+}
+
+function renderGig() {
+  const s = song();
+  $('#gig-name').textContent = s.title || 'Untitled';
+  const bits = [];
+  if (s.artist) bits.push(s.artist);
+  if (s.key) bits.push('Key ' + s.key);
+  if (s.bpm) bits.push(s.bpm + ' bpm');
+  if (s.time && s.time !== '4/4') bits.push(s.time);
+  $('#gig-meta').textContent = bits.join('  ·  ');
+
+  const l = listById(state.currentListId);
+  const songs = l ? listSongs(l) : [];
+  const i = songs.findIndex(x => x.id === s.id);
+  const inList = !!l && i > -1;
+  $('#gig-prev').hidden = !inList;
+  $('#gig-next').hidden = !inList;
+  $('#gig-prev').disabled = !inList || i === 0;
+  $('#gig-next').disabled = !inList || i === songs.length - 1;
+  const pos = $('#gig-pos');
+  pos.innerHTML = '';
+  if (inList) {
+    pos.append(el('span', 'gp-name', l.name), el('span', 'gp-n', `${i + 1}/${songs.length}`));
+    pos.setAttribute('aria-label', `${l.name}, song ${i + 1} of ${songs.length} — jump to another`);
+  }
+  $('#gig-pos').hidden = !inList;
+  if (!inList) closeJump();
+
+  const foot = $('#gig-foot');
+  const nxt = inList ? songs[i + 1] : null;
+  foot.textContent = nxt ? 'Next: ' + (nxt.title || 'Untitled') : '';
+  foot.hidden = !nxt;
+
+  const host = $('#gig-body');
+  host.innerHTML = '';
+  if (!s.sections.length) {
+    host.appendChild(el('p', 'gig-empty', 'This song has no regions yet.'));
+    return;
+  }
+  let barNo = 1;
+  s.sections.forEach(sec => {
+    host.appendChild(gigSection(sec, barNo));
+    barNo += barCount(sec);
+  });
+}
+
+function gigSection(sec, startBar) {
+  const wrap = el('section', 'g-sect');
+  wrap.style.setProperty('--sec', sec.color);
+  const rows = packRows(sec.bars, startBar);
+
+  rows.forEach((row, ri) => {
+    const cues = rowCues(sec, row);
+    if (cues.length) {
+      const lane = el('div', 'g-cues');
+      const base = row.items[0].no - cueOffset(sec, row.items[0].i);
+      cues.forEach(c => {
+        const abs = base + c.bar - 1;
+        const item = row.items.find(it => abs >= it.no && abs < it.no + it.span) || row.items[0];
+        const tag = el('span', 'g-cue');
+        tag.append(c.icon || '📌', el('span', null, c.text));
+        tag.style.gridColumn = `${item.col + 1} / span ${Math.max(1, item.span)}`;
+        lane.appendChild(tag);
+      });
+      lane.style.gridTemplateColumns = `repeat(${PER_ROW},1fr)`;
+      wrap.appendChild(lane);
+    }
+
+    const box = el('div', 'g-box');
+    if (ri === 0) {
+      const strip = el('div', 'g-strip');
+      strip.append(el('span', 'g-name', sec.name || 'Region'));
+      if ((sec.repeat || 1) > 1) strip.append(el('span', 'g-rep', '×' + sec.repeat));
+      if (sec.note) strip.append(el('span', 'g-note', sec.note));
+      box.appendChild(strip);
+    }
+    const line = el('div', 'g-row');
+    line.style.gridTemplateColumns = `repeat(${Math.max(1, row.used)},1fr)`;
+    row.items.forEach(it => {
+      const cell = el('div', 'g-bar');
+      cell.style.gridColumn = `span ${it.span}`;
+      cell.append(el('span', 'g-no', it.span > 1 ? `${it.no}–${it.no + it.span - 1}` : String(it.no)));
+      const ch = el('div', 'g-chords' + (it.bar.beats.length > 1 ? ' split' : ''));
+      ch.style.setProperty('--beats', it.bar.beats.length);
+      it.bar.beats.forEach(v => ch.appendChild(el('span', 'g-ch', v || '')));
+      cell.appendChild(ch);
+      if (it.bar.lyric) cell.appendChild(el('div', 'g-lyric', it.bar.lyric));
+      line.appendChild(cell);
+    });
+    box.appendChild(line);
+    wrap.appendChild(box);
+  });
+  return wrap;
+}
 
 /* ─── PDF ───────────────────────────────────────────────────────
    The print stylesheet already lays the chart out cleanly, so "Save as PDF"
@@ -1430,6 +1854,18 @@ $('#drawer-close').onclick = closeDrawer;
 $('#drawer-scrim').onclick = closeDrawer;
 $('#btn-new-song').onclick = () => { const s = blankSong(); state.songs.push(s); state.currentId = s.id; save(); render(); $('#song-title').focus(); };
 $('#btn-pdf').onclick      = exportPDF;
+$('#btn-gig').onclick      = gigOn;
+$('#gig-close').onclick    = gigOff;
+$('#gig-pos').onclick      = toggleJump;
+$('#gig-body').addEventListener('pointerdown', closeJump);
+$('#gig-prev').onclick     = () => gigStep(-1);
+$('#gig-next').onclick     = () => gigStep(1);
+$('#gig-bigger').onclick   = () => { gigScale += 0.12; applyGigScale(); };
+$('#gig-smaller').onclick  = () => { gigScale -= 0.12; applyGigScale(); };
+$('#tab-songs').onclick    = () => showTab('songs');
+$('#tab-lists').onclick    = () => showTab('lists');
+$('#sheet-cancel').onclick = closeSheet;
+$('#sheet-scrim').onclick  = closeSheet;
 $('#btn-save').onclick     = saveNow;
 $('#btn-cloud').onclick    = cloudDialog;
 $('#btn-account').onclick  = () => { closeDrawer(); cloudDialog(); };
@@ -1492,9 +1928,24 @@ const Tip = (() => {
 })();
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { Tip.hide(); closeDrawer(); if (!$('#viewer').hidden) closeViewer(); }
-  const typing = /input|textarea|select/i.test(document.activeElement.tagName);
-  if (!typing && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); sectionDialog(); }
+  if (gigIsOn()) {
+    if (e.key === 'Escape')     { e.preventDefault(); if (!$('#gig-jump').hidden) closeJump(); else gigOff(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); gigStep(1); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); gigStep(-1); }
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); gigScale += 0.12; applyGigScale(); }
+    if (e.key === '-' || e.key === '_') { e.preventDefault(); gigScale -= 0.12; applyGigScale(); }
+    return;
+  }
+  if (e.key === 'Escape') {
+    Tip.hide();
+    if (!$('#sheet').hidden) { e.preventDefault(); closeSheet(); return; }
+    closeDrawer();
+    if (!$('#viewer').hidden) closeViewer();
+  }
+  const typing = /input|textarea|select/i.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); sectionDialog(); }
+  if (e.key === 'g' || e.key === 'G') { e.preventDefault(); gigOn(); }
 });
 
 /* icons declared in the markup */

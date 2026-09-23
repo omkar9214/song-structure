@@ -191,9 +191,11 @@ button{cursor:pointer;touch-action:manipulation}
   user-select:none;padding:1px 3px;border-radius:4px;z-index:2}
 
 /* move handle */
-.m-grip{display:grid;place-items:center;border:1px solid transparent;background:transparent;color:var(--muted);
-  border-radius:6px;width:24px;height:22px;padding:0;cursor:grab;touch-action:none;
+.m-grip{position:absolute;top:2px;right:3px;z-index:4;display:none;place-items:center;
+  border:1px solid var(--line-strong);background:var(--panel);color:var(--muted);
+  border-radius:6px;width:26px;height:24px;padding:0;cursor:grab;touch-action:none;
   transition:background var(--t),color var(--t),border-color var(--t)}
+.measure:hover .m-grip,.measure:focus-within .m-grip{display:grid}
 .m-grip:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .m-grip:active{cursor:grabbing}
 .measure.dragging{opacity:.35}
@@ -210,7 +212,7 @@ body.is-dragging .measure{cursor:grabbing}
   background:var(--accent);z-index:5;border-radius:2px}
 .measure.drop-before::before{left:-2px}
 .measure.drop-after::before{right:-2px}
-.m-tools{position:absolute;top:2px;right:3px;display:none;gap:1px;z-index:3;background:var(--panel);
+.m-tools{position:absolute;top:2px;right:32px;display:none;gap:1px;z-index:3;background:var(--panel);
   border-radius:6px;box-shadow:var(--shadow)}
 .measure:hover .m-tools,.measure:focus-within .m-tools{display:flex}
 
@@ -225,11 +227,15 @@ body.is-dragging .measure{cursor:grabbing}
 .beat:focus{border-bottom-color:var(--accent)}
 .m-chords.split .beat{font-size:19px}
 
-.m-lyric{position:absolute;left:6px;right:6px;bottom:3px;border:none;background:transparent;outline:none;
-  font-size:11px;color:var(--muted);padding:1px 2px;text-align:center;border-radius:4px;
-  opacity:0;transition:opacity var(--t)}
-.m-lyric.has,.measure:hover .m-lyric,.m-lyric:focus{opacity:1}
-.m-lyric:focus{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--accent)}
+/* The cue under a bar is the thing you read on stage, so it is always on —
+   never hidden behind a hover. Empty ones show nothing but a rule when the
+   pointer is over the bar, so a blank chart stays blank. */
+.m-lyric{position:absolute;left:5px;right:5px;bottom:3px;border:none;background:transparent;outline:none;
+  font-size:11.5px;font-weight:500;color:var(--ink-2);padding:1px 2px;text-align:center;border-radius:4px;
+  text-overflow:ellipsis;border-bottom:1px solid transparent}
+.m-lyric::placeholder{color:transparent}
+.measure:hover .m-lyric:placeholder-shown{border-bottom-color:var(--line)}
+.m-lyric:focus{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--accent);border-bottom-color:transparent}
 
 .m-icons{position:absolute;right:4px;bottom:4px;display:flex;gap:3px;z-index:2}
 .micon{display:grid;place-items:center;width:20px;height:20px;border:1px solid var(--line-strong);
@@ -310,23 +316,154 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
   padding:3px 12px;font-size:12.5px;font-weight:650;flex:none}
 .toast-do:hover{background:var(--panel);color:var(--ink)}
 
+/* the ⋯ that opens the action sheet — touch only, see the media query below */
+.m-more,.r-more{display:none;place-items:center;border:1px solid var(--line-strong);background:var(--panel);
+  color:var(--muted);border-radius:7px;padding:0;position:absolute;z-index:5}
+.m-more{top:2px;right:2px;width:32px;height:28px}
+.r-more{position:static;width:32px;height:28px;border-color:rgba(255,255,255,.5);
+  background:rgba(255,255,255,.18);color:#fff}
+
+.sheet-menu{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;justify-content:flex-end}
+.sheet-scrim{position:absolute;inset:0;background:rgba(10,10,14,.5)}
+.sheet-panel{position:relative;background:var(--panel);border-radius:16px 16px 0 0;padding:10px 12px;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom));box-shadow:var(--shadow-lift);
+  max-height:78vh;overflow:auto;animation:sheet-up 160ms cubic-bezier(.2,.7,.3,1)}
+@keyframes sheet-up{from{transform:translateY(14px);opacity:.6}to{transform:none;opacity:1}}
+.sheet-panel h3{margin:4px 6px 10px;font-size:13px;color:var(--muted);font-weight:650;letter-spacing:.02em}
+.sheet-row{display:flex;align-items:center;gap:12px;width:100%;border:none;background:transparent;color:var(--ink);
+  padding:14px 10px;border-radius:10px;font-size:15px;font-weight:550;text-align:left}
+.sheet-row:hover,.sheet-row:focus-visible{background:var(--sunk)}
+.sheet-row.danger{color:var(--danger)}
+.sheet-cancel{width:100%;justify-content:center;margin-top:6px;padding:13px;font-size:15px}
+body.sheet-on{overflow:hidden}
+@media(min-width:721px){
+  .sheet-menu{justify-content:center;align-items:center}
+  .sheet-panel{border-radius:14px;width:320px;max-width:90vw;padding-bottom:10px;animation:none}
+}
+
+
+/* ── tabs + setlists in the drawer ──────────────────────── */
+.tabs{display:flex;gap:4px;padding:8px 10px 0}
+.tab{flex:1;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:8px;
+  padding:8px 10px;font-size:13px;font-weight:600;transition:background var(--t),color var(--t)}
+.tab:hover{background:var(--sunk);color:var(--ink)}
+.tab.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+
+.list-new{width:100%;justify-content:center;margin-bottom:10px}
+.list-empty{color:var(--muted);font-size:12.5px;line-height:1.7;padding:6px 4px;margin:0}
+.list-box{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel);overflow:hidden}
+.list-box.open{border-color:var(--line-strong);box-shadow:var(--shadow)}
+.list-head{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 4px}
+.list-main{flex:1;min-width:0;cursor:pointer}
+.list-name{font-weight:650;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-sub{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-go{padding:5px 10px;font-size:12px;gap:5px;flex:none}
+.list-go:disabled{opacity:.45;cursor:default}
+.list-body{border-top:1px solid var(--line);padding:6px}
+.list-song{display:flex;align-items:center;gap:7px;padding:7px 6px;border-radius:8px}
+.list-song:hover{background:var(--sunk)}
+.list-song.on{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent)}
+.ls-no{font-family:var(--mono);font-size:11px;color:var(--muted);width:16px;text-align:right;flex:none}
+.ls-main{flex:1;min-width:0;cursor:pointer}
+.ls-title{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ls-sub{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ls-tools{display:flex;gap:1px;flex:none}
+.list-add{padding:6px 4px 2px}
+.list-select{width:100%;border:1px solid var(--line-strong);background:var(--sunk);color:var(--ink);
+  border-radius:8px;padding:8px 10px;font-size:12.5px}
+
+/* ── gig mode ───────────────────────────────────────────────
+   Read-only by construction: nothing in here is an input or a button
+   except the bar at the top. --gs scales the whole chart at once. */
+.gig{position:fixed;inset:0;z-index:120;background:var(--bg);display:flex;flex-direction:column;--gs:1}
+body.gig-on{overflow:hidden}
+.gig-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));
+  background:var(--panel);border-bottom:1px solid var(--line-strong);box-shadow:var(--shadow)}
+.gig-head{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25;padding-left:2px}
+.gig-head b{font-size:16px;font-weight:700;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gig-head span{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gig-pos{font-size:11.5px;color:var(--muted);font-family:var(--mono);flex:none;padding:6px 10px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:34vw;
+  border:1px solid var(--line);background:var(--sunk);border-radius:8px}
+.gig-pos:hover{border-color:var(--line-strong);color:var(--ink-2)}
+.gp-name{margin-right:6px}
+.gp-n{font-weight:700;color:var(--ink-2)}
+.gig-jump{position:absolute;top:calc(56px + env(safe-area-inset-top));right:10px;z-index:3;width:260px;max-width:88vw;
+  max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line-strong);border-radius:12px;
+  box-shadow:var(--shadow-lift);padding:6px}
+.gj-row{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;color:var(--ink);
+  padding:11px 10px;border-radius:9px;font-size:14px;font-weight:550;text-align:left}
+.gj-row:hover{background:var(--sunk)}
+.gj-row.on{background:var(--accent-soft);color:var(--accent)}
+.gj-no{font-family:var(--mono);font-size:11px;color:var(--muted);width:14px;flex:none}
+.gj-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gig-btn{display:grid;place-items:center;width:44px;height:40px;border:1px solid var(--line-strong);
+  background:var(--panel);color:var(--ink-2);border-radius:10px;padding:0;flex:none;font-size:14px;font-weight:700}
+.gig-btn:hover{background:var(--sunk);color:var(--ink)}
+.gig-btn:disabled{opacity:.3}
+.gig-btn .gig-sub{font-size:11px;margin-left:1px}
+.gig-x{border-color:var(--accent);color:var(--accent)}
+.gig-x:hover{background:var(--accent);color:var(--accent-ink)}
+.gig-body{flex:1;overflow:auto;padding:14px 14px 40px;-webkit-overflow-scrolling:touch}
+.gig-empty{color:var(--muted);text-align:center;padding:40px}
+.gig-foot{padding:7px 14px calc(7px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
+  background:var(--panel);color:var(--muted);font-size:12.5px;font-weight:600}
+
+.g-sect{margin-bottom:calc(16px * var(--gs))}
+.g-cues{display:grid;gap:5px;margin-bottom:5px;align-items:end}
+.g-cue{display:inline-flex;align-items:center;gap:5px;justify-self:start;background:var(--panel);
+  border:1px solid var(--line-strong);border-bottom:2px solid var(--sec);border-radius:7px 7px 3px 3px;
+  padding:3px 9px;font-size:calc(12px * var(--gs));font-weight:600;max-width:100%}
+.g-cue span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-box{border:1px solid var(--bar);border-radius:9px;overflow:hidden;background:var(--panel);
+  box-shadow:var(--shadow);margin-bottom:8px}
+.g-strip{display:flex;align-items:center;justify-content:center;gap:9px;min-height:calc(26px * var(--gs));
+  background:var(--sec);color:#fff;padding:3px 10px;border-bottom:1px solid var(--bar)}
+.g-name{font-size:calc(13px * var(--gs));font-weight:700;letter-spacing:.03em}
+.g-rep{font-family:var(--mono);font-size:calc(11px * var(--gs));font-weight:700;border-radius:99px;
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);padding:0 8px}
+.g-note{font-size:calc(11px * var(--gs));font-style:italic;color:rgba(255,255,255,.9);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-row{display:grid;background:var(--panel)}
+.g-bar{position:relative;min-height:calc(78px * var(--gs));border-left:1px solid var(--bar);
+  display:flex;flex-direction:column;justify-content:center;padding:14px 4px 16px}
+.g-bar:first-child{border-left:none}
+.g-no{position:absolute;top:3px;left:6px;font-family:var(--mono);font-size:calc(10px * var(--gs));color:var(--muted)}
+.g-chords{display:grid;place-items:center;gap:2px}
+.g-chords.split{grid-template-columns:repeat(var(--beats,4),1fr);width:100%}
+.g-ch{font-size:calc(32px * var(--gs));font-weight:600;letter-spacing:-.03em;line-height:1.1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.g-chords.split .g-ch{font-size:calc(20px * var(--gs))}
+.g-lyric{position:absolute;left:5px;right:5px;bottom:3px;text-align:center;font-size:calc(11.5px * var(--gs));
+  font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:720px){
+  .g-row{grid-template-columns:repeat(2,1fr)!important}
+  .g-bar[style*="span 2"],.g-bar[style*="span 3"],.g-bar[style*="span 4"]{grid-column:span 2!important}
+  .g-ch{font-size:calc(26px * var(--gs))}
+  .gig-head b{font-size:14.5px}
+  .gig-bar{gap:4px;padding:6px 8px}
+  .gig-btn{width:40px;height:38px}
+  .gig-pos{max-width:none;padding:6px 8px}
+  .gp-name{display:none}                      /* the number is enough on a phone */
+  .gig-body{padding:10px 10px 30px}
+}
+
 /* ── touch: hover-only controls must stay reachable ─────── */
-@media (hover:none){
-  /* No hover on touch. Pinning every control open buries the chart, so they
-     appear when you tap the bar or the region (focus-within) — and they grow
-     to a real thumb target when they do. */
+@media (hover:none),(pointer:coarse){
+  /* No hover on touch — and Safari fires :hover on a tap, which used to throw
+     the whole tool row over the block the moment you tried to type in it.
+     Nothing opens by itself here: the ⋯ opens it, a tap anywhere closes it. */
   .tip{display:none}
-  .m-tools{display:none}
-  .measure:focus-within .m-tools{display:flex}
-  .measure:focus-within .barline-btn,.measure:focus-within .barline-add{opacity:1;
-    transform:translate(-50%,-50%) scale(1)}
-  .measure:focus-within .barline-add{transform:translate(0,-50%) scale(1)}
-  .region:focus-within .r-tools{display:flex}
-  /* the lyric line stays reachable without a hover, but shows as a faint
-     rule rather than an ellipsis on every single bar */
-  .m-lyric{opacity:1;border-bottom:1px dotted var(--line)}
-  .m-lyric::placeholder{color:transparent}
-  .m-lyric.has,.m-lyric:focus{border-bottom-color:transparent}
+  /* nothing opens by itself: two small corner controls, and ⋯ opens the sheet */
+  .m-more,.r-more{display:grid}
+  .m-tools,.measure:hover .m-tools,.measure:focus-within .m-tools{display:none}
+  .r-tools,.region:hover .r-tools,.region:focus-within .r-tools{display:none}
+  .m-grip,.measure:hover .m-grip,.measure:focus-within .m-grip{display:grid;top:2px;right:38px;
+    width:32px;height:28px}
+  .barline-btn,.barline-add{display:none}      /* in the sheet instead — see app.js */
+  .m-lyric:placeholder-shown{border-bottom:1px dotted var(--line)}
+  .m-lyric:focus{border-bottom-color:transparent}
   .ibtn,.m-grip{width:36px;height:34px}
   .micon{width:30px;height:30px}
   .barline-btn,.barline-add{width:28px;height:28px}
@@ -362,6 +499,8 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
   .beat.solo{font-size:26px}
   .beat{font-size:16px}
   .m-lyric{font-size:10.5px}
+  /* a narrow block has no room for two controls — dragging is in the sheet */
+  .m-grip,.measure:hover .m-grip,.measure:focus-within .m-grip{display:none}
   .markers{display:flex;flex-wrap:wrap;gap:4px}
   .mk-slot{display:contents}
   .marker{font-size:10.5px;padding:3px 7px}
@@ -390,7 +529,8 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
 
 /* ── print ──────────────────────────────────────────────── */
 @media print{
-  .topbar,.m-tools,.r-tools,.add-cell,.barline-btn,.barline-add,.add-section-row,.drawer,.viewer,.toast,.tip{display:none!important}
+  .topbar,.m-tools,.r-tools,.m-more,.r-more,.add-cell,.barline-btn,.barline-add,.add-section-row,
+  .drawer,.viewer,.toast,.tip,.gig{display:none!important}
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}
   .sect{break-inside:avoid}

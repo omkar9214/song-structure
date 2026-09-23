@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260911-16">
+<link rel="stylesheet" href="app.css?v=20260923-2">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -29,6 +29,7 @@
   <div class="topbar-actions">
     <button id="btn-songs" class="btn ghost" data-icon="list" data-tip="All your songs" aria-label="Songs"><span class="lbl">Songs</span></button>
     <button id="btn-new-song" class="btn ghost" data-icon="filePlus" data-tip="Start a new, empty song" aria-label="New song"><span class="lbl">New</span></button>
+    <button id="btn-gig" class="btn ghost" data-icon="play" data-tip="Gig mode — the chart big and read-only, nothing to knock out of place. Press G" aria-label="Gig mode"><span class="lbl">Gig</span></button>
     <button id="btn-pdf" class="btn ghost" data-icon="print" data-tip="Save this chart as a PDF (choose “Save as PDF” in the print dialog)" aria-label="Save as PDF"><span class="lbl">PDF</span></button>
     <button id="btn-save" class="btn" data-icon="save" data-tip="Save now — the chart is already kept on this device, this pushes it to your account" aria-label="Save"><span class="lbl">Save</span></button>
     <button id="btn-cloud" class="btn cloud-btn" data-icon="user" data-tip="Sign in to sync songs and attachments across your devices" aria-label="Sign in"><span class="lbl">Sign in</span><span class="dot"></span></button>
@@ -290,10 +291,15 @@
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Your songs" hidden>
   <div class="drawer-panel">
     <div class="drawer-head">
-      <h2>Songs</h2>
+      <h2 id="drawer-title">Songs</h2>
       <button class="btn ghost" id="drawer-close" data-icon="x" aria-label="Close"></button>
     </div>
-    <div id="song-list" class="song-list"></div>
+    <div class="tabs" role="tablist" aria-label="Songs or setlists">
+      <button class="tab on" id="tab-songs" role="tab" aria-selected="true" aria-controls="song-list">Songs</button>
+      <button class="tab" id="tab-lists" role="tab" aria-selected="false" aria-controls="list-pane">Setlists</button>
+    </div>
+    <div id="song-list" class="song-list" role="tabpanel" aria-labelledby="tab-songs"></div>
+    <div id="list-pane" class="song-list" role="tabpanel" aria-labelledby="tab-lists" hidden></div>
     <div class="drawer-foot">
       <button id="btn-backup" class="btn ghost" data-icon="export" data-tip="Save every part of this song — media included — as a backup file">Back up</button>
       <button id="btn-restore" class="btn ghost" data-icon="import" data-tip="Load a song from a backup file">Restore</button>
@@ -316,13 +322,63 @@
   </div>
 </div>
 
+<!-- ── Setlist ──────────────────────────────────────────────── -->
+<dialog id="dlg-list" aria-labelledby="list-title">
+  <form class="dlg" onsubmit="return false">
+    <h2 id="list-title">New setlist</h2>
+    <label class="field">
+      <span>Name <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
+      <input id="list-name" placeholder="Friday — The Fox" spellcheck="false" required>
+    </label>
+    <label class="field">
+      <span>Note (optional)</span>
+      <input id="list-note" placeholder="e.g. 45 min, two sets" spellcheck="false">
+    </label>
+    <menu class="dlg-actions">
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="list-save">Save setlist</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ── Gig mode ─────────────────────────────────────────────────
+     A separate, read-only rendering of the song. Nothing in here is an
+     input, so there is nothing to knock out of place mid-song. -->
+<div class="gig" id="gig" role="dialog" aria-modal="true" aria-label="Gig mode" hidden>
+  <header class="gig-bar">
+    <button class="gig-btn" id="gig-prev" data-icon="caretLeft" aria-label="Previous song in the setlist"></button>
+    <div class="gig-head">
+      <b id="gig-name"></b>
+      <span id="gig-meta"></span>
+    </div>
+    <button class="gig-pos" id="gig-pos" aria-haspopup="true" aria-expanded="false" hidden></button>
+    <button class="gig-btn" id="gig-smaller" aria-label="Smaller type">A<span class="gig-sub">−</span></button>
+    <button class="gig-btn" id="gig-bigger" aria-label="Bigger type">A<span class="gig-sub">+</span></button>
+    <button class="gig-btn" id="gig-next" data-icon="caretRight" aria-label="Next song in the setlist"></button>
+    <button class="gig-btn gig-x" id="gig-close" data-icon="x" aria-label="Leave gig mode"></button>
+  </header>
+  <div class="gig-jump" id="gig-jump" hidden></div>
+  <div class="gig-body" id="gig-body"></div>
+  <div class="gig-foot" id="gig-foot" hidden></div>
+</div>
+
+<!-- ── Action sheet (touch) ─────────────────────────────────── -->
+<div class="sheet-menu" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <div class="sheet-scrim" id="sheet-scrim"></div>
+  <div class="sheet-panel">
+    <h3 id="sheet-title"></h3>
+    <div id="sheet-items"></div>
+    <button type="button" class="btn ghost sheet-cancel" id="sheet-cancel">Cancel</button>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260911-16"></script>
-<script src="icons.js?v=20260911-16"></script>
-<script src="db.js?v=20260911-16"></script>
-<script src="cloud.js?v=20260911-16"></script>
-<script src="app.js?v=20260911-16"></script>
+<script src="config.js?v=20260923-2"></script>
+<script src="icons.js?v=20260923-2"></script>
+<script src="db.js?v=20260923-2"></script>
+<script src="cloud.js?v=20260923-2"></script>
+<script src="app.js?v=20260923-2"></script>
 </body>
 </html>
