@@ -1749,7 +1749,9 @@ function gigSection(sec, startBar) {
       ch.style.setProperty('--beats', it.bar.beats.length);
       it.bar.beats.forEach(v => ch.appendChild(el('span', 'g-ch', v || '')));
       cell.appendChild(ch);
-      if (it.bar.lyric) cell.appendChild(el('div', 'g-lyric', it.bar.lyric));
+      /* every bar gets the cue slot, empty or not, so chords across a row sit
+         on the same line instead of bobbing up and down */
+      cell.appendChild(el('div', 'g-lyric', it.bar.lyric || ''));
       line.appendChild(cell);
     });
     box.appendChild(line);
