@@ -110,14 +110,39 @@ song. The layout you see is the layout you get.
 **Restore**, which write and read a JSON file with the media embedded — that is the way to
 move a song to another machine, since a PDF cannot be edited back.
 
+### Gig mode
+
+The **Gig** button (or `G`) swaps the editor for a read-only rendering of the same song:
+no inputs, no tools, no dialogs, so nothing can be knocked out of place mid-song. Every
+cue is on, including the line under each bar. `A−` / `A+` scales the whole chart for
+however far away the stand is and remembers where you left it, and the screen is kept
+awake while gig mode is up. `✕` or `Esc` leaves.
+
+### Setlists
+
+A setlist is one gig: a named, ordered list of songs, in the second tab of the drawer.
+**Start** opens the first song in gig mode and `‹` `›` walk the running order; the setlist
+name in the gig bar drops down a list to jump to any song in it. Setlists hold ids, not
+copies — deleting a song only takes it out of the running order — and they sync with your
+songs when you are signed in.
+
+### Touch
+
+There is no hover on a touch screen, and Safari fires `:hover` on a tap, so the tool row
+used to spring open over the block you were trying to type in. On touch, nothing opens by
+itself: **⋯** on a block or a region opens an action sheet with labelled, thumb-sized rows.
+Every field you can type in is 16px there, because Safari on iOS zooms the page when it
+focuses anything smaller and does not zoom back out.
+
 ### Keyboard
 
 - `Enter` in a bar → jump to the next bar
 - `←` `→` at the edge of a chord → step between fields, then between bars
 - `Backspace` in an empty beat → step back a beat
 - `N` (outside a text field) → new region
+- `G` → gig mode; in gig mode `←` `→` change song, `+` `−` change size
 - `←` `→` on a block's grip → move that block one place
-- `Esc` → close a dialog / viewer
+- `Esc` → close a dialog / viewer / gig mode
 
 ## Sync (optional)
 
