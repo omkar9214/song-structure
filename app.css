@@ -134,9 +134,12 @@ button{cursor:pointer;touch-action:manipulation}
   background:transparent;color:#fff;opacity:.85;padding:0;border-radius:4px}
 .r-caret:hover{opacity:1;background:rgba(255,255,255,.18)}
 .r-cont{opacity:.55;cursor:default;font-size:12px}
-.r-mid{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
+/* the caret and the tools are absolute, so the middle has to reserve their
+   space itself — without this a long region name runs under both */
+.r-mid{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;padding:0 46px}
 .r-name{border:none;background:transparent;outline:none;text-align:center;font-size:12.5px;font-weight:650;
-  letter-spacing:.03em;color:#fff;padding:1px 4px;min-width:44px;border-radius:4px;text-overflow:ellipsis}
+  letter-spacing:.03em;color:#fff;padding:1px 4px;min-width:44px;max-width:100%;border-radius:4px;
+  text-overflow:ellipsis}
 .r-name::placeholder{color:rgba(255,255,255,.6)}
 .r-name:hover:not([readonly]){background:rgba(255,255,255,.14)}
 .r-name:focus{background:rgba(255,255,255,.22)}
@@ -471,6 +474,13 @@ body.gig-on{overflow:hidden}
   /* Safari on iOS zooms the page whenever it focuses a field smaller than
      16px, and it does not zoom back out. Every field you can type in is 16px
      for that reason, not for looks — and the block grows to make room. */
+  /* everything you tap is at least ~40px; a 26px swatch or a 28px dialog
+     button is a miss waiting to happen with a plectrum in your hand */
+  .rm-chip{padding:8px 13px;font-size:13px}
+  .sw{width:34px;height:34px}
+  .dlg-actions .btn{padding:11px 16px}
+  .trim-tools .btn{padding:11px 14px;font-size:13.5px}
+  .choice{padding:14px}
   .measure{height:100px}
   .m-chords{padding-bottom:28px}              /* the cue line keeps its own band */
   .m-lyric{font-size:16px;bottom:5px}
