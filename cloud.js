@@ -111,6 +111,13 @@ const Cloud = (() => {
   /* ── songs ──────────────────────────────────────────────────── */
   const stamp = so => so.updated || 0;
 
+  /* A song with nothing written in it is never sent. Opening the app on a new
+     device makes one to put on screen, and pushing it is what left an
+     "Untitled" in the account for every device and every cleared browser.
+     The test itself lives in app.js — it errs entirely towards keeping. */
+  const blank = so => !!(window.songIsBlank && window.songIsBlank(so));
+  const worthSending = list => list.filter(s => !blank(s));
+
   /* Setlists have no table of their own, and adding one would mean asking a
      musician to run SQL before a gig. They ride in the songs table instead,
      as a single row marked __setlists — filtered out of the song list at both
@@ -187,8 +194,8 @@ const Cloud = (() => {
         changed = true;
       }
 
-      /* songs that only exist here */
-      for (const s of local) if (!seen.has(s.id)) toPush.push(s);
+      /* songs that only exist here — an empty one is not worth a row */
+      for (const s of local) if (!seen.has(s.id) && !blank(s)) toPush.push(s);
 
       const once = dedupe(toPush);      /* one row per id, or the upsert is rejected */
       if (once.length) {
@@ -219,7 +226,7 @@ const Cloud = (() => {
 
   /* called on every local save — batched, so typing does not hammer the API */
   function touch(so) {
-    if (!user || !so) return;
+    if (!user || !so || blank(so)) return;      /* nothing written yet — nothing to send */
     pending.add(so.id);
     set('pending');
     clearTimeout(timer);
@@ -237,7 +244,7 @@ const Cloud = (() => {
   async function flush() {
     if (!user || (!pending.size && !listsDirty)) return;
     const ids = [...pending]; pending.clear();
-    const songs = state_songs().filter(s => ids.includes(s.id));
+    const songs = worthSending(state_songs().filter(s => ids.includes(s.id)));
     const lists = listsDirty ? [listPayload()] : [];
     listsDirty = false;
     if (!songs.length && !lists.length) return set('ok');
@@ -250,6 +257,7 @@ const Cloud = (() => {
      been holding a stale copy while the other one moved. Look before writing. */
   async function pushSongs(songs, extra) {
     const out = (extra || []).slice(), kept = [];
+    songs = worthSending(songs || []);
     if (songs.length) {
       const { data: rows, error } = await sb.from('songs').select('id,data').in('id', songs.map(s => s.id));
       if (error) throw error;

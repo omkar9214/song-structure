@@ -48,8 +48,10 @@ function packRows(bars, startBar) {
 /* ─── state ─────────────────────────────────────────────────────── */
 let state = migrate(load());
 
+const BLANK_BPM = 120, BLANK_TIME = '4/4';
 function blankSong() {
-  return { id: uid('s'), title: '', artist: '', key: '', bpm: 120, time: '4/4', sections: [], media: [], updated: Date.now() };
+  return { id: uid('s'), title: '', artist: '', key: '', bpm: BLANK_BPM, time: BLANK_TIME,
+           sections: [], media: [], updated: Date.now() };
 }
 function load() {
   try {
@@ -137,15 +139,9 @@ async function recoverFromVault() {
   if (!back && !fresher && !listsBack) return;
 
   /* put the reader back where they were, not on the empty chart this boot made */
-  if (madeBlank && back) {
-    const blank = state.songs.find(x => x.id === madeBlank);
-    const untouched = blank && !blank.title && !blank.artist && !(blank.sections || []).length;
-    if (untouched) state.songs = state.songs.filter(x => x.id !== madeBlank);
-    if (state.currentId === madeBlank) {
-      state.currentId = (songById(snap.currentId) ? snap.currentId : null) ||
-        state.songs.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))[0].id;
-    }
-  }
+  const wasCurrent = state.currentId === madeBlank;
+  dropBootBlank();
+  if (wasCurrent && songById(snap.currentId)) state.currentId = snap.currentId;
   delete state.__madeBlank;
   writeLocal();
   render({ top: true });
@@ -155,6 +151,56 @@ async function recoverFromVault() {
   toast(back ? `${back} song${back === 1 ? '' : 's'} put back from this device's backup store`
              : fresher ? 'Restored a newer copy from this device'
              : 'Setlists put back from this device\'s backup store');
+}
+
+/* ─── a song with nothing in it ──────────────────────────────────
+   Opening the app on a device that has no local copy yet makes an empty
+   song to put on screen, and the sync then pushed that empty song to the
+   account — so every new device, and every cleared browser, left another
+   "Untitled" behind. Two rules fix it: an empty song is never pushed, and
+   the one made at boot is dropped the moment the real library arrives.
+
+   This decides what may be thrown away, so it errs entirely on the side of
+   keeping: anything at all written anywhere in the song — a title, a key, a
+   region, an attachment, even a tempo moved off the default — makes it not
+   empty. A false "not empty" costs one stray row; a false "empty" would
+   lose work, and that is not a trade this app makes. */
+function songIsBlank(so) {
+  if (!so || so.__setlists) return false;
+  if (String(so.title  || '').trim()) return false;
+  if (String(so.artist || '').trim()) return false;
+  if (String(so.key    || '').trim()) return false;
+  if (String(so.note   || '').trim()) return false;
+  if ((so.sections || []).length) return false;
+  if ((so.media || []).length) return false;
+  if (so.track) return false;
+  /* a tempo or a time signature that is not the default is something written */
+  if (so.bpm != null && String(so.bpm) !== String(BLANK_BPM)) return false;
+  if (so.time && so.time !== BLANK_TIME) return false;
+  return true;
+}
+/* cloud.js loads first and calls this at run time. Declared functions do land
+   on window, unlike a top-level const — but this app has been bitten by that
+   distinction before, so it is published on purpose rather than by luck. */
+window.songIsBlank = songIsBlank;
+const blankSongs = () => state.songs.filter(songIsBlank);
+
+/* The empty song this boot put on screen, once there is a real one to show
+   instead. Never touches a song that has been written in, and never leaves
+   the app with no song at all. */
+function dropBootBlank() {
+  const id = state.__madeBlank;
+  if (!id) return false;
+  const blank = state.songs.find(x => x.id === id);
+  if (!blank || !songIsBlank(blank)) { delete state.__madeBlank; return false; }
+  const others = state.songs.filter(x => x.id !== id);
+  if (!others.length) return false;
+  state.songs = others;
+  if (state.currentId === id)
+    state.currentId = others.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))[0].id;
+  delete state.__madeBlank;
+  forget_base(id);
+  return true;
 }
 
 /* ─── what each device last agreed with the server ──────────────
@@ -194,6 +240,7 @@ function take_lists(lists, stamp) {
 /* the cloud layer reads and writes through these two */
 function state_songs() { return state.songs; }
 function onPulled() {
+  dropBootBlank();
   writeLocal();
   state.lastSync = Date.now();
   render();
@@ -1789,6 +1836,36 @@ function paintSongBody() {
    phone in airplane mode". This line answers it: how many charts are on the
    device, how many attachments are here rather than in the account, and when
    it last agreed with the server. */
+/* Clearing up the empty songs already in the account. Deliberate, never
+   automatic: the app now stops making them, and what to do with the ones
+   already there is his call. The song on screen is always spared, so nothing
+   vanishes from under you while you are looking at it. */
+function removableBlanks() {
+  return blankSongs().filter(s => s.id !== state.currentId);
+}
+async function tidyBlanks() {
+  const gone = removableBlanks();
+  if (!gone.length) return;
+  if (state.songs.length - gone.length < 1) return;
+  const n = gone.length;
+  if (!await ask(
+    `${n} song${n === 1 ? ' has' : 's have'} nothing written in ${n === 1 ? 'it' : 'them'} — no title, no regions, nothing attached. `
+    + `${n === 1 ? 'It' : 'They'} will be removed from this device and from your account. Every song with anything in it stays.`,
+    `Remove ${n} empty`)) return;
+  const ids = new Set(gone.map(s => s.id));
+  let touchedLists = false;
+  state.setlists.forEach(l => {
+    const before = (l.songs || []).length;
+    l.songs = (l.songs || []).filter(id => !ids.has(id));
+    if (l.songs.length !== before) touchedLists = true;
+  });
+  state.songs = state.songs.filter(s => !ids.has(s.id));
+  ids.forEach(id => { forget_base(id); if (Cloud.ready) Cloud.remove(id); });
+  if (touchedLists) saveLists();
+  save(); render(); renderSongs();
+  toast(`${n} empty song${n === 1 ? '' : 's'} removed`);
+}
+
 function storageLine() {
   const wrap = el('div', 'store-line');
   const txt = el('div', 'store-txt');
@@ -1798,6 +1875,16 @@ function storageLine() {
   wrap.appendChild(txt);
   const act = el('div', 'store-act');
   wrap.appendChild(act);
+
+  const empties = removableBlanks();
+  if (empties.length && state.songs.length > empties.length) {
+    const b = el('button', 'btn ghost store-get');
+    b.type = 'button';
+    b.append(icon('trash', 13), el('span', null, `Remove ${empties.length} empty`));
+    b.dataset.tip = 'Songs with nothing written in them at all — the one you have open is never touched';
+    b.onclick = tidyBlanks;
+    act.appendChild(b);
+  }
 
   mediaAudit().catch(() => ({ total: 0, have: [], missing: [] })).then(a => {
     if (!a.total) { txt.textContent += ' · no attachments'; return; }

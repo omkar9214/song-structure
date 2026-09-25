@@ -190,6 +190,27 @@ focuses anything smaller and does not zoom back out.
 follows whatever the phone or laptop is set to, which is right most of the time; Dark is
 there for a dark stage in daylight hours.
 
+### Empty songs
+
+Opening the app on a device with no local copy yet puts an empty song on
+screen while the real library is fetched — and that empty song used to be
+pushed to the account, so every new device and every cleared browser left
+another *Untitled* behind.
+
+Two rules now. **An empty song is never sent to the account**, at any of the
+places a song can be pushed; the first thing you write in it is what makes it
+real. And **the empty song made at boot is dropped the moment the library
+arrives**, so you land on a song instead of a blank page.
+
+"Empty" errs entirely towards keeping: a title, an artist, a key, a note, a
+region, an attachment, an mp3, or a tempo or time signature moved off the
+default all make a song worth keeping. A wrong "not empty" costs one stray
+row; a wrong "empty" would lose work.
+
+The ones already in the account are cleared up deliberately, never
+automatically: the Songs tab offers **Remove _n_ empty** when there are any,
+and the song you have open is always spared.
+
 ## Sync (optional)
 
 Everything works offline with no account — the cloud is a layer on top, not a requirement.
