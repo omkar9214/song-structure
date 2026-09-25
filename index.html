@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260925-2">
+<link rel="stylesheet" href="app.css?v=20260925-3">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -41,11 +41,11 @@
   <h1 class="sr-only" id="doc-h1">Song structure chart</h1>
 
   <section class="song-head">
-    <input class="title-in" id="song-title" placeholder="Song title" spellcheck="false" aria-label="Song title">
-    <input class="artist-in" id="song-artist" placeholder="Artist / notes" spellcheck="false">
+    <input class="title-in" id="song-title" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Song title" spellcheck="false" aria-label="Song title">
+    <input class="artist-in" id="song-artist" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Artist / notes" spellcheck="false">
     <div class="meta-row">
-      <label class="meta" data-tip="The key the song is in — for your own reference"><span>Key</span><input id="song-key" placeholder="C" spellcheck="false"></label>
-      <label class="meta" data-tip="Tempo. Drives the running-time estimate"><span>BPM</span><input id="song-bpm" type="number" min="20" max="300" placeholder="120"></label>
+      <label class="meta" data-tip="The key the song is in — for your own reference"><span>Key</span><input id="song-key" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="C" spellcheck="false"></label>
+      <label class="meta" data-tip="Tempo. Drives the running-time estimate"><span>BPM</span><input id="song-bpm" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" type="number" min="20" max="300" placeholder="120"></label>
       <label class="meta" data-tip="Time signature — sets how many beats a bar holds"><span>Time</span>
         <select id="song-time">
           <option value="4/4">4/4</option>
@@ -77,12 +77,12 @@
 
 <!-- ── Add / edit section dialog ─────────────────────────────── -->
 <dialog id="dlg-section" aria-labelledby="dlg-section-title">
-  <form class="dlg" onsubmit="return false">
+  <div class="dlg">
     <h2 id="dlg-section-title">Add region</h2>
 
     <label class="field">
       <span>Region name <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
-      <input id="sec-name" list="section-presets" placeholder="Chorus" required spellcheck="false">
+      <input id="sec-name" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" list="section-presets" placeholder="Chorus" required spellcheck="false">
       <datalist id="section-presets">
         <option>Intro</option><option>Verse</option><option>Verse 1</option><option>Verse 2</option>
         <option>Pre-Chorus</option><option>Chorus</option><option>Post-Chorus</option>
@@ -95,11 +95,11 @@
     <div class="field-row">
       <label class="field">
         <span>How many bars? <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
-        <input id="sec-bars" type="number" min="1" max="128" value="8" required>
+        <input id="sec-bars" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" type="number" min="1" max="128" value="8" required>
       </label>
       <label class="field">
         <span>Repeat (×)</span>
-        <input id="sec-repeat" type="number" min="1" max="64" value="1" required>
+        <input id="sec-repeat" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" type="number" min="1" max="64" value="1" required>
       </label>
     </div>
 
@@ -110,23 +110,23 @@
 
     <label class="field">
       <span>Note (optional)</span>
-      <input id="sec-note" placeholder="e.g. half-time feel, no cymbals" spellcheck="false">
+      <input id="sec-note" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="e.g. half-time feel, no cymbals" spellcheck="false">
     </label>
 
     <menu class="dlg-actions">
       <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
       <button type="button" class="btn primary" id="sec-submit">Add region</button>
     </menu>
-  </form>
+  </div>
 </dialog>
 
 <!-- ── Cue dialog ────────────────────────────────────────────── -->
 <dialog id="dlg-cue" aria-labelledby="dlg-cue-title">
-  <form class="dlg" onsubmit="return false">
+  <div class="dlg">
     <h2 id="dlg-cue-title">Pointer / cue</h2>
     <label class="field">
       <span>Text</span>
-      <input id="cue-text" list="cue-presets" placeholder="Vocal starts here" spellcheck="false">
+      <input id="cue-text" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" list="cue-presets" placeholder="Vocal starts here" spellcheck="false">
       <datalist id="cue-presets">
         <option>Vocal starts here</option><option>Drums enter</option><option>Bass enters</option>
         <option>Full band</option><option>Guitar solo</option><option>Everyone out</option>
@@ -147,7 +147,7 @@
       </label>
       <label class="field">
         <span>On bar #</span>
-        <input id="cue-bar" type="number" min="1" value="1">
+        <input id="cue-bar" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" type="number" min="1" value="1">
       </label>
     </div>
     <menu class="dlg-actions">
@@ -155,7 +155,7 @@
       <button type="button" class="btn danger-outline" id="cue-delete" hidden>Delete</button>
       <button type="button" class="btn primary" id="cue-save">Save cue</button>
     </menu>
-  </form>
+  </div>
 </dialog>
 
 <!-- ── Account / sync ───────────────────────────────────────── -->
@@ -211,7 +211,7 @@
 
 <!-- ── Attach: file or clip ────────────────────────────────── -->
 <dialog id="dlg-attach" aria-labelledby="attach-title">
-  <form class="dlg" onsubmit="return false">
+  <div class="dlg">
     <h2 id="attach-title">Attach</h2>
     <p class="dlg-note" id="attach-where"></p>
     <div class="choices">
@@ -227,12 +227,12 @@
     <menu class="dlg-actions">
       <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
     </menu>
-  </form>
+  </div>
 </dialog>
 
 <!-- ── Trim a clip out of the song ───────────────────────────── -->
 <dialog id="dlg-trim" aria-labelledby="trim-title">
-  <form class="dlg trim" onsubmit="return false">
+  <div class="dlg trim">
     <h2 id="trim-title">Clip from the song</h2>
 
     <div class="trim-strip" id="trim-strip">
@@ -243,11 +243,11 @@
     <div class="trim-row">
       <label class="field">
         <span>Start</span>
-        <input id="trim-start-t" class="time-in" inputmode="numeric" placeholder="0:00.0">
+        <input id="trim-start-t" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" class="time-in" inputmode="numeric" placeholder="0:00.0">
       </label>
       <label class="field">
         <span>End</span>
-        <input id="trim-end-t" class="time-in" inputmode="numeric" placeholder="0:00.0">
+        <input id="trim-end-t" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" class="time-in" inputmode="numeric" placeholder="0:00.0">
       </label>
       <div class="field trim-len"><span>Length</span><b id="trim-len">0:00</b></div>
     </div>
@@ -265,26 +265,26 @@
 
     <label class="field">
       <span>Label</span>
-      <input id="trim-label" placeholder="e.g. the riff" spellcheck="false">
+      <input id="trim-label" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="e.g. the riff" spellcheck="false">
     </label>
 
     <menu class="dlg-actions">
       <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
       <button type="button" class="btn primary" id="trim-save">Attach clip</button>
     </menu>
-  </form>
+  </div>
 </dialog>
 
 <!-- ── Confirm ──────────────────────────────────────────────── -->
 <dialog id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
-  <form class="dlg confirm" onsubmit="return false">
+  <div class="dlg confirm">
     <h2 id="confirm-title">Are you sure?</h2>
     <p id="confirm-body"></p>
     <menu class="dlg-actions">
       <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
       <button type="button" class="btn danger-btn" id="confirm-ok">Delete</button>
     </menu>
-  </form>
+  </div>
 </dialog>
 
 <!-- ── Songs drawer ──────────────────────────────────────────── -->
@@ -325,21 +325,21 @@
 
 <!-- ── Setlist ──────────────────────────────────────────────── -->
 <dialog id="dlg-list" aria-labelledby="list-title">
-  <form class="dlg" onsubmit="return false">
+  <div class="dlg">
     <h2 id="list-title">New setlist</h2>
     <label class="field">
       <span>Name <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
-      <input id="list-name" placeholder="Friday — The Fox" spellcheck="false" required>
+      <input id="list-name" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Friday — The Fox" spellcheck="false" required>
     </label>
     <label class="field">
       <span>Note (optional)</span>
-      <input id="list-note" placeholder="e.g. 45 min, two sets" spellcheck="false">
+      <input id="list-note" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="e.g. 45 min, two sets" spellcheck="false">
     </label>
     <menu class="dlg-actions">
       <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
       <button type="button" class="btn primary" id="list-save">Save setlist</button>
     </menu>
-  </form>
+  </div>
 </dialog>
 
 <!-- ── Gig mode ─────────────────────────────────────────────────
@@ -387,10 +387,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260925-2"></script>
-<script src="icons.js?v=20260925-2"></script>
-<script src="db.js?v=20260925-2"></script>
-<script src="cloud.js?v=20260925-2"></script>
-<script src="app.js?v=20260925-2"></script>
+<script src="config.js?v=20260925-3"></script>
+<script src="icons.js?v=20260925-3"></script>
+<script src="db.js?v=20260925-3"></script>
+<script src="cloud.js?v=20260925-3"></script>
+<script src="app.js?v=20260925-3"></script>
 </body>
 </html>

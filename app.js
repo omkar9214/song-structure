@@ -10,7 +10,27 @@ const COLORS = ['#2f5fa8','#b0491e','#2b7a4b','#6b46c1','#a3226b','#8a6212','#1f
 const KIND_ICON = { image: 'image', audio: 'audio', video: 'video', file: 'file' };
 const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const $  = s => document.querySelector(s);
-const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
+/* Every field the chart is made of — chords, lyrics, region names — is a
+   plain text input, and that is all a password manager or Safari's contact
+   autofill needs to decide it might be a login. The result on stage is a
+   "Passwords" key sitting over the keyboard and a manager's icon inside the
+   bar you are trying to write a chord in. Nothing built here is ever a
+   credential: the only two in the app are declared in the markup, inside the
+   one real <form>. So everything made through el() says so, once, centrally. */
+const NO_FILL = {
+  autocomplete: 'off',
+  'data-1p-ignore': '',          /* 1Password  */
+  'data-lpignore': 'true',       /* LastPass   */
+  'data-bwignore': '',           /* Bitwarden  */
+  'data-form-type': 'other'      /* Dashlane   */
+};
+const el = (t, c, txt) => {
+  const n = document.createElement(t);
+  if (c) n.className = c;
+  if (txt != null) n.textContent = txt;
+  if (t === 'input' || t === 'textarea') for (const k in NO_FILL) n.setAttribute(k, NO_FILL[k]);
+  return n;
+};
 /* pack blocks into rows of PER_ROW bars of time, never splitting a block */
 function packRows(bars, startBar) {
   const rows = []; let row = [], used = 0, no = startBar;
