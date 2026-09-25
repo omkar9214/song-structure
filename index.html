@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260923-14">
+<link rel="stylesheet" href="app.css?v=20260925-1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -33,7 +33,7 @@
     <button id="btn-pdf" class="btn ghost" data-icon="print" data-tip="Save this chart as a PDF (choose “Save as PDF” in the print dialog)" aria-label="Save as PDF"><span class="lbl">PDF</span></button>
     <button id="btn-save" class="btn" data-icon="save" data-tip="Save now — the chart is already kept on this device, this pushes it to your account" aria-label="Save"><span class="lbl">Save</span></button>
     <button id="btn-cloud" class="btn cloud-btn" data-icon="user" data-tip="Sign in to sync songs and attachments across your devices" aria-label="Sign in"><span class="lbl">Sign in</span><span class="dot"></span></button>
-    <input type="file" id="import-file" accept="application/json" hidden>
+    <input type="file" id="import-file" accept="application/json,.json" hidden>
   </div>
 </header>
 
@@ -301,8 +301,8 @@
     <div id="song-list" class="song-list" role="tabpanel" aria-labelledby="tab-songs"></div>
     <div id="list-pane" class="song-list" role="tabpanel" aria-labelledby="tab-lists" hidden></div>
     <div class="drawer-foot">
-      <button id="btn-backup" class="btn ghost" data-icon="export" data-tip="Save every part of this song — media included — as a backup file">Back up</button>
-      <button id="btn-restore" class="btn ghost" data-icon="import" data-tip="Load a song from a backup file">Restore</button>
+      <button id="btn-backup" class="btn ghost" data-icon="export" data-tip="Save every song and setlist on this device as one backup file you can keep, send, or restore into another account">Back up all</button>
+      <button id="btn-restore" class="btn ghost" data-icon="import" data-tip="Restore from a backup file — nothing already here is overwritten">Restore</button>
       <button id="btn-theme" class="btn ghost" data-tip="Light, dark, or whatever this device is set to">Theme</button>
       <button id="btn-account" class="btn ghost" data-icon="list" data-tip="Account and sync">Account</button>
     </div>
@@ -353,11 +353,22 @@
       <span id="gig-meta"></span>
     </div>
     <button class="gig-pos" id="gig-pos" aria-haspopup="true" aria-expanded="false" hidden></button>
+    <button class="gig-btn" id="gig-auto" aria-label="Auto-scroll the chart in time with the song"></button>
     <button class="gig-btn" id="gig-smaller" aria-label="Smaller type">A<span class="gig-sub">−</span></button>
     <button class="gig-btn" id="gig-bigger" aria-label="Bigger type">A<span class="gig-sub">+</span></button>
     <button class="gig-btn" id="gig-next" data-icon="caretRight" aria-label="Next song in the setlist"></button>
     <button class="gig-btn gig-x" id="gig-close" data-icon="x" aria-label="Leave gig mode"></button>
   </header>
+  <!-- auto-scroll: the only control in here that is not a button, and it can
+       change nothing about the chart — only how fast it travels -->
+  <div class="gig-scroll" id="gig-scroll" hidden>
+    <button class="gig-btn sm" id="gig-pause" aria-label="Pause scrolling"></button>
+    <button class="gig-btn sm" id="gig-restart" data-icon="repeat" aria-label="Back to the top of the chart"></button>
+    <span class="ga-read" id="gig-speed-txt"></span>
+    <label class="ga-slider"><span class="sr-only">Scroll speed</span>
+      <input type="range" id="gig-speed" min="0.5" max="2" step="0.05" value="1"></label>
+    <span class="ga-hint">tap the chart to pause</span>
+  </div>
   <div class="gig-jump" id="gig-jump" hidden></div>
   <div class="gig-body" id="gig-body"></div>
   <div class="gig-foot" id="gig-foot" hidden></div>
@@ -376,10 +387,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260923-14"></script>
-<script src="icons.js?v=20260923-14"></script>
-<script src="db.js?v=20260923-14"></script>
-<script src="cloud.js?v=20260923-14"></script>
-<script src="app.js?v=20260923-14"></script>
+<script src="config.js?v=20260925-1"></script>
+<script src="icons.js?v=20260925-1"></script>
+<script src="db.js?v=20260925-1"></script>
+<script src="cloud.js?v=20260925-1"></script>
+<script src="app.js?v=20260925-1"></script>
 </body>
 </html>

@@ -310,6 +310,35 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
 .song-row .sr-main{flex:1;min-width:0}
 .song-row .sr-title{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .song-row .sr-sub{font-size:11.5px;color:var(--muted)}
+.song-row .sr-no{font-family:var(--mono);font-size:11px;color:var(--muted);width:16px;text-align:right;flex:none}
+
+/* find a song — 32 charts is more than you can read down before a song starts */
+.song-find{padding:2px 2px 8px}
+.song-find-in{width:100%;box-sizing:border-box;border:1px solid var(--line-strong);background:var(--sunk);
+  color:var(--ink);border-radius:9px;padding:9px 11px;font-size:13px;font-family:inherit}
+.song-find-in:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+
+/* what this device is holding, and whether it will open with no signal */
+.store-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 4px 9px;margin-bottom:2px;
+  border-bottom:1px solid var(--line)}
+.store-txt{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1;min-width:140px}
+.store-get{padding:5px 9px;font-size:11.5px;gap:5px;flex:none}
+
+/* setlists are folders: a filed song lives under its gig, not in the long list */
+.song-body{padding-top:8px}
+.folder{border:1px solid var(--line);border-radius:10px;margin-bottom:7px;background:var(--panel);overflow:hidden}
+.folder.open{border-color:var(--line-strong);box-shadow:var(--shadow)}
+.folder-head{display:flex;align-items:center;gap:6px;padding:7px 8px 7px 3px}
+.folder-main{flex:1;min-width:0;cursor:pointer}
+.folder-name{font-weight:650;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-sub{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-go{padding:5px 10px;font-size:12px;gap:5px;flex:none}
+.folder-go:disabled{opacity:.45;cursor:default}
+.folder-body{border-top:1px solid var(--line);padding:5px;background:var(--sunk)}
+.folder-body .song-row{padding:8px 8px}
+.song-sep{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+  padding:12px 4px 5px;border-top:1px solid var(--line);margin-top:4px}
+
 .drawer-foot{margin-top:auto;display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-top:1px solid var(--line)}
 .drawer-foot .btn{flex:1 1 calc(50% - 6px);justify-content:center;white-space:nowrap}
 
@@ -350,7 +379,13 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
 .sheet-row:hover,.sheet-row:focus-visible{background:var(--sunk)}
 .sheet-row.danger{color:var(--danger)}
 .sheet-cancel{width:100%;justify-content:center;margin-top:6px;padding:13px;font-size:15px}
-body.sheet-on{overflow:hidden}
+/* NOT overflow:hidden on <body>. Locking the document's scroll box is the
+   classic iOS reset: WebKit drops the scroll offset while it is locked, so
+   closing the sheet put you back at the top of the chart — on an iPad and in
+   every WebKit browser, never in Chrome on a Mac. The sheet is a full-screen
+   fixed layer already; containing the scroll inside it is enough. */
+.sheet-menu{overscroll-behavior:contain}
+.sheet-scrim{touch-action:none}
 @media(min-width:721px){
   .sheet-menu{justify-content:center;align-items:center}
   .sheet-panel{border-radius:14px;width:320px;max-width:90vw;padding-bottom:10px;animation:none}
@@ -419,6 +454,15 @@ body.gig-on{overflow:hidden}
 .gig-btn .gig-sub{font-size:11px;margin-left:1px}
 .gig-x{border-color:var(--accent);color:var(--accent)}
 .gig-x:hover{background:var(--accent);color:var(--accent-ink)}
+/* auto-scroll strip — sits under the bar only while scrolling is armed */
+.gig-scroll{display:flex;align-items:center;gap:9px;padding:7px 10px;border-bottom:1px solid var(--line);
+  background:var(--sunk);flex:none}
+.gig-btn.sm{width:38px;height:34px}
+.gig-btn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.ga-read{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);white-space:nowrap;flex:none}
+.ga-slider{flex:1;min-width:90px;display:flex;align-items:center}
+.ga-slider input{width:100%;accent-color:var(--accent);height:26px}
+.ga-hint{font-size:11px;color:var(--muted);white-space:nowrap;flex:none}
 .gig-body{flex:1;overflow:auto;padding:14px 14px 40px;-webkit-overflow-scrolling:touch}
 .gig-empty{color:var(--muted);text-align:center;padding:40px}
 .gig-foot{padding:7px 14px calc(7px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
@@ -461,6 +505,8 @@ body.gig-on{overflow:hidden}
   .gig-bar{gap:4px;padding:6px 8px}
   .gig-btn{width:40px;height:38px}
   .gig-pos{max-width:none;padding:6px 8px}
+  .ga-hint{display:none}                      /* the gesture is learned once */
+  .gig-scroll{gap:7px;padding:6px 8px}
   .gp-name{display:none}                      /* the number is enough on a phone */
   .gig-body{padding:10px 10px 30px}
 }
@@ -485,7 +531,10 @@ body.gig-on{overflow:hidden}
   .m-lyric:focus{border-bottom-color:transparent}
   .ibtn,.m-grip{width:36px;height:34px}
   .tab{padding:11px 10px}
-  .list-go{padding:9px 12px}
+  .list-go,.folder-go{padding:9px 12px}
+  .song-find-in{font-size:16px}               /* under 16px and iOS zooms in on focus */
+  .ga-slider input{height:34px}               /* a slider you can hit with a thumb */
+  .gig-btn.sm{width:42px;height:38px}
   /* Safari on iOS zooms the page whenever it focuses a field smaller than
      16px, and it does not zoom back out. Every field you can type in is 16px
      for that reason, not for looks — and the block grows to make room. */

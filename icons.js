@@ -34,6 +34,8 @@ const ICONS = {
   moon:      'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
   auto:      'M12 3a9 9 0 0 0 0 18z|M12 21a9 9 0 0 0 0-18',
   caretLeft: 'M15 18l-6-6 6-6',
+  pause:     'M7 4h3v16H7zM14 4h3v16h-3z',
+  folder:    'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   play:      'M7 4l13 8-13 8V4z',
   more:      'M6 12h.01M12 12h.01M18 12h.01',
   setlist:   'M4 5h10M4 10h10M4 15h7|M18 4v11|M16 6l2-2 2 2|M20 17.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',

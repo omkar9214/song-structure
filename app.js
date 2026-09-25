@@ -33,24 +33,107 @@ function blankSong() {
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY));
-    if (raw && raw.songs && raw.songs.length) return raw;
+    if (raw && raw.songs && raw.songs.length) { delete raw.__madeBlank; return raw; }
   } catch (_) {}
+  /* Nothing in the quick slot. That is a brand new device — or one whose
+     browser has just emptied it — so the blank song this makes is marked as
+     manufactured, and the vault recovery throws it away rather than leaving
+     you staring at an empty chart with your songs hidden behind it. */
   const s = blankSong();
-  return { songs: [s], currentId: s.id };
+  return { songs: [s], currentId: s.id, __madeBlank: s.id };
 }
+/* ─── writing to this device ─────────────────────────────────────
+   Two copies, always. localStorage is the one the app boots from — it is
+   synchronous, so the chart is on screen with no await. But it is a small
+   box that a browser is allowed to empty on its own, and when it does, an
+   iPad with no signal has nothing to show. So every write also goes to the
+   vault in IndexedDB, and the boot merges anything localStorage has lost
+   back in. A failed localStorage write is reported, never swallowed. */
+let lsBroken = false;
+let vaultT = null;
+function writeLocal() {
+  const json = JSON.stringify(state);
+  try {
+    localStorage.setItem(KEY, json);
+    lsBroken = false;
+  } catch (e) {
+    /* out of room, or storage blocked — the vault is now the only copy */
+    if (!lsBroken) {
+      lsBroken = true;
+      console.warn('[store] localStorage write failed', e);
+      if (typeof toast === 'function') toast('This device would not store the chart in the quick slot — keeping it in the backup store');
+    }
+  }
+  /* the vault is written once the typing stops, not on every keystroke */
+  clearTimeout(vaultT);
+  vaultT = setTimeout(() => { if (window.Vault) Vault.put(json); }, 700);
+  return !lsBroken;
+}
+
 function save(quiet) {
   song().updated = Date.now();
-  localStorage.setItem(KEY, JSON.stringify(state));
+  writeLocal();
   if (!quiet && window.Cloud) Cloud.touch(song());
 }
 
 /* Setlists live beside the songs in the same record. They are written with
    saveLists(), not save(): editing a setlist must not restamp the open song. */
-function saveLocal() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function saveLocal() { writeLocal(); }
 function saveLists() {
   state.setlistsUpdated = Date.now();
   saveLocal();
   if (window.Cloud && Cloud.touchLists) Cloud.touchLists();
+}
+
+/* ─── putting back what localStorage lost ────────────────────────
+   Runs once, just after the first paint. Only ever adds: a song in the vault
+   that this device no longer has is pushed back, and a song the vault holds a
+   newer copy of replaces the stale one. Nothing is removed on the strength of
+   the vault, because a song deleted on purpose must stay deleted. */
+async function recoverFromVault() {
+  if (!window.Vault) return;
+  const rec = await Vault.get();
+  if (!rec || !rec.json) return;
+  let snap;
+  try { snap = JSON.parse(rec.json); } catch (_) { return; }
+  if (!snap || !Array.isArray(snap.songs)) return;
+
+  const byId = Object.fromEntries(state.songs.map(s => [s.id, s]));
+  let back = 0, fresher = 0, listsBack = false;
+  const madeBlank = state.__madeBlank;
+  for (const so of snap.songs) {
+    if (so.__setlists) continue;
+    const mine = byId[so.id];
+    if (!mine) { state.songs.push(so); back++; }
+    else if ((so.updated || 0) > (mine.updated || 0)) { Object.assign(mine, so); fresher++; }
+  }
+  if ((snap.setlistsUpdated || 0) > (state.setlistsUpdated || 0) && Array.isArray(snap.setlists)) {
+    state.setlists = snap.setlists;
+    state.setlists.forEach(l => { if (!Array.isArray(l.songs)) l.songs = []; });
+    state.setlistsUpdated = snap.setlistsUpdated;
+    listsBack = true;
+  }
+  if (!back && !fresher && !listsBack) return;
+
+  /* put the reader back where they were, not on the empty chart this boot made */
+  if (madeBlank && back) {
+    const blank = state.songs.find(x => x.id === madeBlank);
+    const untouched = blank && !blank.title && !blank.artist && !(blank.sections || []).length;
+    if (untouched) state.songs = state.songs.filter(x => x.id !== madeBlank);
+    if (state.currentId === madeBlank) {
+      state.currentId = (songById(snap.currentId) ? snap.currentId : null) ||
+        state.songs.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))[0].id;
+    }
+  }
+  delete state.__madeBlank;
+  writeLocal();
+  render({ top: true });
+  if (!$('#drawer').hidden) showTab(drawerTab);
+  /* anything put back here is new to the account as far as the server knows */
+  if (window.Cloud && Cloud.ready) Cloud.syncAll();
+  toast(back ? `${back} song${back === 1 ? '' : 's'} put back from this device's backup store`
+             : fresher ? 'Restored a newer copy from this device'
+             : 'Setlists put back from this device\'s backup store');
 }
 
 /* ─── what each device last agreed with the server ──────────────
@@ -90,7 +173,8 @@ function take_lists(lists, stamp) {
 /* the cloud layer reads and writes through these two */
 function state_songs() { return state.songs; }
 function onPulled() {
-  localStorage.setItem(KEY, JSON.stringify(state));
+  writeLocal();
+  state.lastSync = Date.now();
   render();
   if (!$('#drawer').hidden) showTab(drawerTab);
   if (typeof gigIsOn === 'function' && gigIsOn()) renderGig();
@@ -129,8 +213,22 @@ function newSection(name, count, repeat, color, note) {
 }
 const findSection = id => song().sections.find(s => s.id === id);
 
-/* ─── render ────────────────────────────────────────────────────── */
-function render() {
+/* ─── render ────────────────────────────────────────────────────
+   Rebuilding #sections empties it, and an empty container has no height, so
+   the browser clamps the page scroll to the top — then the new content
+   arrives and you are looking at the title again. Chrome hides this with
+   scroll anchoring; Safari and iPadOS do not, which is why a duplicate or an
+   edit threw you back to the top there and not on the Mac. So the scroll
+   position is taken before the rebuild and put back after it. Only an
+   explicit render({ top: true }) — a different song — goes to the top. */
+function render(opts) {
+  const y = window.scrollY;
+  const toTop = !!(opts && opts.top === true);
+  paint();
+  if (toTop) { heldY = 0; window.scrollTo(0, 0); }
+  else if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
+}
+function paint() {
   const s = song();
   $('#song-title').value  = s.title;
   $('#song-artist').value = s.artist;
@@ -543,7 +641,7 @@ function measureRow(sec, row) {
 function measure(sec, it, firstInRow) {
   const { bar, i, span, no } = it;
   const m = el('div', 'measure');
-  m.dataset.sec = sec.id; m.dataset.idx = i; m.dataset.no = no;
+  m.dataset.sec = sec.id; m.dataset.idx = i; m.dataset.no = no; m.dataset.bar = bar.id;
   m.style.gridColumn = `span ${span}`;
 
   const label = span > 1 ? `${no}\u2013${no + span - 1}` : String(no);
@@ -592,6 +690,7 @@ function measure(sec, it, firstInRow) {
     { icon: 'copy', label: 'Duplicate this block', tip: 'Duplicate this block', run: () => {
       const copy = JSON.parse(JSON.stringify(bar)); copy.id = uid('b');
       sec.bars.splice(i + 1, 0, copy); save(); render();
+      focusBar(copy.id);                     /* carry on typing in the copy, where you were */
     } },
     { icon: 'clip', label: 'Attach a clip or file', tip: 'Attach a clip of the song, or a file, to this block', run: () => attachTo(bar, name) },
     { icon: 'trash', label: span > 1 ? 'Delete this block' : 'Delete this bar', tip: span > 1 ? 'Delete this block' : 'Delete this bar',
@@ -629,6 +728,32 @@ function measure(sec, it, firstInRow) {
            sheetButton(name.charAt(0).toUpperCase() + name.slice(1), sheetActs, 'm-more'));
 
   return m;
+}
+
+/* ─── holding your place ─────────────────────────────────────────
+   Anything that covers the chart — the ⋯ sheet, gig mode — can cost the
+   document its scroll offset on WebKit. The offset is taken before the
+   overlay opens and put back when it closes, so where you were is a fact the
+   app holds, not something it hopes the browser remembers. */
+let heldY = 0;
+const holdScroll = () => { heldY = window.scrollY; };
+function releaseScroll() {
+  const y = heldY;
+  window.scrollTo(0, y);
+  /* and again on the next two frames: a late reflow (or a keyboard sliding
+     away) can move it after we have already put it back */
+  let n = 0;
+  const again = () => { if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y); if (++n < 3) requestAnimationFrame(again); };
+  requestAnimationFrame(again);
+}
+
+/* after a rebuild, put the caret in a particular block again */
+function focusBar(id) {
+  requestAnimationFrame(() => {
+    const m = document.querySelector(`.measure[data-bar="${id}"]`);
+    const inp = m && m.querySelector('.beat');
+    if (inp) inp.focus({ preventScroll: true });
+  });
 }
 
 /* ─── moving a block ────────────────────────────────────────────
@@ -862,6 +987,7 @@ function openSheet(title, acts) {
     host.appendChild(row);
   });
   sheetBack = document.activeElement;
+  holdScroll();
   $('#sheet').hidden = false;
   document.body.classList.add('sheet-on');
   host.firstChild && host.firstChild.focus({ preventScroll: true });
@@ -872,6 +998,7 @@ function closeSheet() {
   document.body.classList.remove('sheet-on');
   if (sheetBack && sheetBack.isConnected) sheetBack.focus({ preventScroll: true });
   sheetBack = null;
+  releaseScroll();
 }
 const closeTools = closeSheet;               /* one thing to close, from anywhere */
 
@@ -1394,33 +1521,217 @@ function ask(body, okLabel = 'Delete') {
   });
 }
 
-/* ─── songs ─────────────────────────────────────────────────────── */
+/* ─── songs ──────────────────────────────────────────────────────
+   Thirty-odd songs in one flat list is a wall you have to read every time.
+   A setlist is a folder: a song filed into one comes out of the loose list
+   and sits under that setlist, so what is left at the bottom is only what
+   has not been filed yet. A song in two setlists appears under both — it is
+   one song, not a copy, and editing it changes it everywhere. */
+let songFilter = '';
+const openFolders = new Set();
+
+const filedIds = () => {
+  const ids = new Set();
+  state.setlists.forEach(l => (l.songs || []).forEach(id => ids.add(id)));
+  return ids;
+};
+const songMatches = (so, q) =>
+  !q || `${so.title || ''} ${so.artist || ''} ${so.key || ''}`.toLowerCase().includes(q);
+
+/* one row in the Songs tab, used both loose and inside a folder */
+function songRow(so, n) {
+  const row = el('div', 'song-row' + (so.id === state.currentId ? ' on' : ''));
+  if (n != null) row.append(el('span', 'sr-no', String(n)));
+  const main = el('div', 'sr-main');
+  main.append(el('div', 'sr-title', so.title || 'Untitled'));
+  const bars = so.sections.reduce((t, x) => t + barCount(x), 0);
+  main.append(el('div', 'sr-sub',
+    `${so.sections.length} region${so.sections.length === 1 ? '' : 's'} · ${bars} bar${bars === 1 ? '' : 's'}${so.key ? ' · ' + so.key : ''}`));
+  main.onclick = () => openFromDrawer(so.id);
+  row.appendChild(main);
+
+  row.appendChild(tool('setlist', 'File this song into a setlist', () => fileDialog(so)));
+  row.appendChild(tool('trash', 'Delete this song', async () => {
+    if (!await ask(`"${so.title || 'Untitled'}" will be removed, along with anything attached to it.`)) return;
+    const inLists = state.setlists.some(l => (l.songs || []).includes(so.id));
+    state.songs = state.songs.filter(x => x.id !== so.id);
+    state.setlists.forEach(l => { l.songs = (l.songs || []).filter(id => id !== so.id); });
+    if (!state.songs.length) state.songs = [blankSong()];
+    if (state.currentId === so.id) state.currentId = state.songs[0].id;
+    forget_base(so.id);
+    if (Cloud.ready) Cloud.remove(so.id);
+    if (inLists) saveLists();
+    save(); render(); renderSongs();
+  }, 'danger'));
+  return row;
+}
+
+/* which setlists a song is in — tick to file it, tick again to take it out */
+function fileDialog(so) {
+  const acts = state.setlists.map(l => {
+    const has = (l.songs || []).includes(so.id);
+    return {
+      icon: has ? 'check' : 'plus',
+      label: `${has ? 'In' : 'Add to'} ${l.name}`,
+      run: () => {
+        if (has) l.songs = l.songs.filter(id => id !== so.id);
+        else l.songs.push(so.id);
+        l.updated = Date.now();
+        openFolders.add(l.id);
+        saveLists(); renderSongs();
+      }
+    };
+  });
+  acts.push({ icon: 'plus', label: 'New setlist with this song…', run: () => listDialog(null, so.id) });
+  acts.push({ icon: 'export', label: 'Back up just this song', run: () => { openSong(so.id); exportSong(); } });
+  openSheet(so.title || 'Untitled', acts);
+}
+
 function renderSongs() {
   const host = $('#song-list');
   host.innerHTML = '';
-  state.songs.slice().sort((a, b) => b.updated - a.updated).forEach(s => {
-    const row = el('div', 'song-row' + (s.id === state.currentId ? ' on' : ''));
-    const main = el('div', 'sr-main');
-    main.append(el('div', 'sr-title', s.title || 'Untitled'));
-    const bars = s.sections.reduce((n, x) => n + barCount(x), 0);
-    main.append(el('div', 'sr-sub', `${s.sections.length} regions · ${bars} bars${s.key ? ' · ' + s.key : ''}`));
-    row.appendChild(main);
-    row.onclick = () => { state.currentId = s.id; save(); render(); renderSongs(); closeDrawer(); };
-    row.appendChild(tool('trash', 'Delete this song', async () => {
-      if (!await ask(`"${s.title || 'Untitled'}" will be removed, along with anything attached to it.`)) return;
-      const inLists = state.setlists.some(l => (l.songs || []).includes(s.id));
-      state.songs = state.songs.filter(x => x.id !== s.id);
-      state.setlists.forEach(l => { l.songs = (l.songs || []).filter(id => id !== s.id); });
-      if (!state.songs.length) state.songs = [blankSong()];
-      if (state.currentId === s.id) state.currentId = state.songs[0].id;
-      forget_base(s.id);
-      if (Cloud.ready) Cloud.remove(s.id);
-      if (inLists) saveLists();
-      save(); render(); renderSongs();
-    }, 'danger'));
-    host.appendChild(row);
-  });
+
+  const find = el('div', 'song-find');
+  const inp = el('input', 'song-find-in');
+  inp.type = 'search'; inp.placeholder = 'Find a song…'; inp.value = songFilter;
+  inp.spellcheck = false;
+  inp.setAttribute('aria-label', 'Find a song by title, artist or key');
+  inp.oninput = () => { songFilter = inp.value.trim().toLowerCase(); paintSongBody(); };
+  find.appendChild(inp);
+  host.appendChild(find);
+
+  host.appendChild(storageLine());
+  const body = el('div', 'song-body');
+  body.id = 'song-body';
+  host.appendChild(body);
+  paintSongBody();
 }
+
+function paintSongBody() {
+  const body = $('#song-body');
+  if (!body) return;
+  body.innerHTML = '';
+  const q = songFilter;
+
+  /* searching cuts through the folders: you want the song, not its filing */
+  if (q) {
+    const hits = state.songs.filter(so => songMatches(so, q))
+      .sort((a, b) => b.updated - a.updated);
+    if (!hits.length) body.appendChild(el('p', 'list-empty', `Nothing matches “${songFilter}”.`));
+    hits.forEach(so => body.appendChild(songRow(so)));
+    return;
+  }
+
+  state.setlists.forEach(l => {
+    const songs = listSongs(l);
+    const open = openFolders.has(l.id);
+    const box = el('div', 'folder' + (open ? ' open' : ''));
+    const head = el('div', 'folder-head');
+    const caret = el('button', 'ibtn');
+    caret.type = 'button';
+    caret.appendChild(icon(open ? 'caretDown' : 'caretRight', 14));
+    caret.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + l.name);
+    caret.setAttribute('aria-expanded', String(open));
+    const flip = () => { open ? openFolders.delete(l.id) : openFolders.add(l.id); paintSongBody(); };
+    caret.onclick = flip;
+    const main = el('div', 'folder-main');
+    main.append(el('div', 'folder-name', l.name));
+    main.append(el('div', 'folder-sub', `${songs.length} song${songs.length === 1 ? '' : 's'}${l.note ? ' · ' + l.note : ''}`));
+    main.onclick = flip;
+    const go = el('button', 'btn folder-go');
+    go.type = 'button';
+    go.append(icon('play', 13), el('span', null, 'Start'));
+    go.dataset.tip = `Open ${l.name} in Gig mode from the top`;
+    go.disabled = !songs.length;
+    go.onclick = () => startList(l);
+    head.append(caret, main, go);
+    box.appendChild(head);
+    if (open) {
+      const inner = el('div', 'folder-body');
+      if (!songs.length) inner.appendChild(el('p', 'list-empty', 'Empty — file a song into it from the list below.'));
+      songs.forEach((so, i) => inner.appendChild(songRow(so, i + 1)));
+      box.appendChild(inner);
+    }
+    body.appendChild(box);
+  });
+
+  const filed = filedIds();
+  const loose = state.songs.filter(so => !filed.has(so.id)).sort((a, b) => b.updated - a.updated);
+  if (state.setlists.length) {
+    body.appendChild(el('div', 'song-sep',
+      loose.length ? `Not in a setlist · ${loose.length}` : 'Every song is filed into a setlist'));
+  }
+  loose.forEach(so => body.appendChild(songRow(so)));
+}
+
+/* ─── what this device is actually holding ───────────────────────
+   Before a gig the question is not "is it synced" but "will it open with the
+   phone in airplane mode". This line answers it: how many charts are on the
+   device, how many attachments are here rather than in the account, and when
+   it last agreed with the server. */
+function storageLine() {
+  const wrap = el('div', 'store-line');
+  const txt = el('div', 'store-txt');
+  const n = state.songs.length;
+  const when = state.lastSync ? new Date(state.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+  txt.textContent = `${n} song${n === 1 ? '' : 's'} on this device${when ? ' · synced ' + when : ''}`;
+  wrap.appendChild(txt);
+  const act = el('div', 'store-act');
+  wrap.appendChild(act);
+
+  mediaAudit().catch(() => ({ total: 0, have: [], missing: [] })).then(a => {
+    if (!a.total) { txt.textContent += ' · no attachments'; return; }
+    txt.textContent += ` · ${a.have.length}/${a.total} files here`;
+    if (!a.missing.length) return;
+    const b = el('button', 'btn ghost store-get');
+    b.type = 'button';
+    b.append(icon('import', 13), el('span', null, `Get ${a.missing.length} for offline`));
+    b.dataset.tip = 'Download every attachment to this device, so the chart is complete with no signal';
+    b.onclick = () => prefetchMedia(a.missing, b);
+    act.appendChild(b);
+  });
+  return wrap;
+}
+
+/* Every attachment that is a file of its own. A clip is not one: it is a
+   start and an end inside the song's own mp3, so downloading that mp3 is what
+   makes every clip taken from it playable offline. Counting clips as files
+   would report a permanent shortfall that no download could ever close. */
+function allRefs() {
+  const out = [];
+  const take = m => { if (m && m.id && !m.clip) out.push(m); };
+  state.songs.forEach(so => {
+    if (so.track) out.push(so.track);
+    (so.media || []).forEach(take);
+    (so.sections || []).forEach(sec => {
+      (sec.media || []).forEach(take);
+      sec.bars.forEach(b => (b.media || []).forEach(take));
+    });
+  });
+  const by = new Map();
+  out.forEach(r => { if (r && r.id && !by.has(r.id)) by.set(r.id, r); });
+  return [...by.values()];
+}
+async function mediaAudit() {
+  const refs = allRefs();
+  if (!refs.length) return { total: 0, have: [], missing: [] };
+  const a = await Media.audit(refs.map(r => r.id));
+  const byId = Object.fromEntries(refs.map(r => [r.id, r]));
+  return { total: refs.length, have: a.have, bytes: a.bytes, missing: a.missing.map(id => byId[id]) };
+}
+/* pull the files this device has not got, so a gig with no signal is complete */
+async function prefetchMedia(refs, btn) {
+  if (!Cloud.ready) { toast('Sign in first — the files live in your account'); return; }
+  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Downloading…'; }
+  let got = 0, failed = 0;
+  for (const ref of refs) {
+    const blob = await Cloud.fetchMedia(ref);
+    blob ? got++ : failed++;
+  }
+  toast(failed ? `${got} downloaded, ${failed} could not be fetched` : `${got} file${got === 1 ? '' : 's'} on this device — ready with no signal`);
+  renderSongs();
+}
+
 let drawerTab = 'songs';
 const openDrawer  = () => { showTab(drawerTab); $('#drawer').hidden = false; };
 const closeDrawer = () => { $('#drawer').hidden = true; };
@@ -1439,7 +1750,7 @@ function newList(name, note) {
   return { id: uid('l'), name: name || 'Setlist', note: note || '', songs: [], updated: Date.now() };
 }
 let listEdit = null;                        /* the setlist being renamed, if any */
-function listDialog(existing) {
+function listDialog(existing, seedSongId) {
   const d = $('#dlg-list');
   listEdit = existing || null;
   $('#list-title').textContent = existing ? 'Rename setlist' : 'New setlist';
@@ -1451,9 +1762,14 @@ function listDialog(existing) {
     if (!name) { $('#list-name').focus(); return; }
     const note = $('#list-note').value.trim();
     if (listEdit) { listEdit.name = name; listEdit.note = note; }
-    else { const l = newList(name, note); state.setlists.push(l); openList = l.id; }
+    else {
+      const l = newList(name, note);
+      if (seedSongId && songById(seedSongId)) l.songs.push(seedSongId);
+      state.setlists.push(l); openList = l.id; openFolders.add(l.id);
+    }
     listEdit = null;
-    saveLists(); d.close(); renderLists();
+    saveLists(); d.close();
+    drawerTab === 'songs' ? renderSongs() : renderLists();
   };
   d.querySelector('[data-close]').onclick = () => { listEdit = null; d.close(); };
   d.showModal();
@@ -1520,7 +1836,8 @@ function renderLists() {
         const t = el('div', 'ls-main');
         t.append(el('div', 'ls-title', so.title || 'Untitled'));
         const bars = so.sections.reduce((n, x) => n + barCount(x), 0);
-        t.append(el('div', 'ls-sub', `${so.sections.length} regions · ${bars} bars${so.key ? ' · ' + so.key : ''}`));
+        t.append(el('div', 'ls-sub',
+          `${so.sections.length} region${so.sections.length === 1 ? '' : 's'} · ${bars} bar${bars === 1 ? '' : 's'}${so.key ? ' · ' + so.key : ''}`));
         t.onclick = () => { state.currentListId = l.id; openSong(so.id); closeDrawer(); };
         row.appendChild(t);
         const tools = el('div', 'ls-tools');
@@ -1567,8 +1884,9 @@ function moveInList(l, i, d) {
 }
 function openSong(id) {
   if (!songById(id)) return;
-  state.currentId = id; saveLocal(); render(); renderSongs();
+  state.currentId = id; saveLocal(); render({ top: true }); renderSongs();
 }
+function openFromDrawer(id) { openSong(id); closeDrawer(); }
 function startList(l) {
   const songs = listSongs(l);
   if (!songs.length) return;
@@ -1605,6 +1923,7 @@ const gigIsOn = () => !$('#gig').hidden;
 
 function gigOn() {
   closeTools();
+  holdScroll();
   /* If you walked in from the top bar, put yourself in whichever setlist has
      this song, so ‹ and › work without going back to the drawer first. */
   const cur = listById(state.currentListId);
@@ -1619,14 +1938,17 @@ function gigOn() {
   renderGig();
   keepAwake();
   $('#gig-body').scrollTop = 0;
+  paintAuto();
   $('#gig-close').focus({ preventScroll: true });
 }
 function gigOff() {
   closeJump();
+  autoStop();
   $('#gig').hidden = true;
   document.body.classList.remove('gig-on');
   releaseWake();
   $('#btn-gig').focus({ preventScroll: true });
+  releaseScroll();
 }
 async function keepAwake() {
   try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
@@ -1642,7 +1964,7 @@ function applyGigScale() {
   gigScale = Math.round(Math.min(1.8, Math.max(0.7, gigScale)) * 100) / 100;
   $('#gig').style.setProperty('--gs', gigScale);
   localStorage.setItem(GIG_SCALE, String(gigScale));
-  if (gigIsOn()) fitGigChords();
+  if (gigIsOn()) { fitGigChords(); if (Auto.on) autoBuild(); }
 }
 function gigStep(d) {
   const l = listById(state.currentListId);
@@ -1722,6 +2044,10 @@ function renderGig() {
     barNo += barCount(sec);
   });
   fitGigChords();
+  /* a new song starts at its top, armed but not moving: the next song in a
+     setlist must not scroll away while you are still counting it in */
+  if (Auto.on) { Auto.t = 0; autoResync(); Auto.paused = true; autoBuild(); }
+  paintAuto();
 }
 
 /* Same idea as the editor's fitChord: "Cmaj7#11/G" must shrink to fit its bar
@@ -1766,6 +2092,12 @@ function gigSection(sec, startBar) {
     }
 
     const box = el('div', 'g-box');
+    /* what auto-scroll reads: how much music this row is worth. A region
+       played four times is drawn once, so its rows each last four times as
+       long — which is why the chart holds still through a repeat instead of
+       sailing past it. */
+    box.dataset.bars = String(Math.max(1, row.used));
+    box.dataset.rep  = String(Math.max(1, sec.repeat || 1));
     if (ri === 0) {
       const strip = el('div', 'g-strip');
       strip.append(el('span', 'g-name', sec.name || 'Region'));
@@ -1794,6 +2126,165 @@ function gigSection(sec, startBar) {
   return wrap;
 }
 
+/* ─── auto-scroll ────────────────────────────────────────────────
+   Hands are on the instrument, so the chart has to come to you. Three things
+   make it readable rather than merely moving:
+
+   · It is paced by the music, not by pixels. A row lasts exactly as long as
+     the music written on it — bars × beats-per-bar × the region's repeat, at
+     the song's BPM. So a "×4" chorus drawn once holds on screen for all four
+     passes, and nothing drifts out of time over a five-minute song.
+   · The bar being played sits about a third of the way down, not at the top.
+     Players read ahead — you are looking at the next two bars while playing
+     this one — and a third of a screen is roughly that lookahead. It also
+     means the first screenful stays still while the music catches up to the
+     anchor line, which is the "the first page takes longer to read" problem
+     solving itself rather than being special-cased.
+   · Motion is continuous and sub-pixel, never line-by-line jumps: the eye
+     tracks a steady creep and loses its place on a jump.
+
+   The speed multiplier is remembered on the song, because the tempo you read
+   a chart at is a fact about that chart, not about the device. */
+const ANCHOR = 0.34;                       /* where the played bar sits, top-down */
+/* Time comes from the clock, not from counting frames. If the browser throttles
+   its animation callbacks — a dimmed screen, a backgrounded app, a slow
+   repaint — a frame-counting scroll silently falls behind the band. Reading
+   the clock each frame means a dropped second is a second the chart catches
+   up on, which is the only correct answer when the music did not wait. */
+const Auto = { on: false, paused: true, raf: 0, t: 0, base: 0, at: 0, plan: null, total: 0, applying: false };
+
+const speedOf = so => Math.min(2, Math.max(0.5, parseFloat((so || song()).gigSpeed) || 1));
+const autoBpm = () => Math.max(20, Math.min(300, parseFloat(song().bpm) || 0)) || 100;
+
+/* time → how far down the chart the music has got */
+function autoBuild() {
+  const body = $('#gig-body');
+  const barSec = 60 / autoBpm() * beatsPerBar();
+  const boxes = [...body.querySelectorAll('.g-box')];
+  const origin = body.getBoundingClientRect().top - body.scrollTop;
+  const segs = [];
+  let t = 0;
+  boxes.forEach((n, k) => {
+    const dur = (parseFloat(n.dataset.bars) || 1) * barSec * (parseFloat(n.dataset.rep) || 1);
+    const y0 = n.getBoundingClientRect().top - origin;
+    /* run to the top of the next row, so the cue lane between them is
+       travelled through rather than skipped over */
+    const nx = boxes[k + 1];
+    const y1 = nx ? nx.getBoundingClientRect().top - origin : body.scrollHeight;
+    segs.push({ t0: t, t1: t + dur, y0, y1: Math.max(y1, y0 + 1) });
+    t += dur;
+  });
+  Auto.plan = segs; Auto.total = t;
+}
+function autoY(t) {
+  const p = Auto.plan;
+  if (!p || !p.length) return 0;
+  if (t <= 0) return p[0].y0;
+  const last = p[p.length - 1];
+  if (t >= last.t1) return last.y1;
+  const seg = p.find(x => t < x.t1) || last;
+  return seg.y0 + (seg.y1 - seg.y0) * ((t - seg.t0) / (seg.t1 - seg.t0));
+}
+/* and back again, so taking over by hand does not lose your place */
+function autoTimeFor(scrollTop) {
+  const p = Auto.plan;
+  if (!p || !p.length) return 0;
+  const y = scrollTop + $('#gig-body').clientHeight * ANCHOR;
+  if (y <= p[0].y0) return 0;
+  const seg = p.find(x => y < x.y1) || p[p.length - 1];
+  return seg.t0 + (seg.t1 - seg.t0) * Math.min(1, Math.max(0, (y - seg.y0) / (seg.y1 - seg.y0)));
+}
+
+function autoResync() { Auto.base = Auto.t; Auto.at = performance.now(); }
+
+function autoStart() {
+  if (!gigIsOn()) return;
+  Auto.on = true; Auto.paused = false;
+  autoResync();
+  autoBuild();
+  $('#gig-scroll').hidden = false;
+  paintAuto();
+  cancelAnimationFrame(Auto.raf);
+  Auto.raf = requestAnimationFrame(autoTick);
+}
+function autoStop() {
+  Auto.on = false; Auto.paused = true;
+  cancelAnimationFrame(Auto.raf); Auto.raf = 0;
+  const bar = $('#gig-scroll');
+  if (bar) bar.hidden = true;
+  paintAuto();
+}
+function autoPause(on) {
+  if (!Auto.on) return;
+  Auto.paused = on == null ? !Auto.paused : !!on;
+  if (!Auto.paused) autoResync();
+  paintAuto();
+}
+function autoRestart() {
+  Auto.t = 0; autoResync();
+  autoBuild();
+  const body = $('#gig-body');
+  body.scrollTop = 0;
+  paintAuto();
+}
+function autoTick(now) {
+  if (!Auto.on) return;
+  const body = $('#gig-body');
+  if (!Auto.paused && Auto.plan) {
+    Auto.t = Auto.base + (now - Auto.at) / 1000 * speedOf();
+    const max = Math.max(0, body.scrollHeight - body.clientHeight);
+    const want = Math.max(0, Math.min(max, autoY(Auto.t) - body.clientHeight * ANCHOR));
+    Auto.applying = true;
+    body.scrollTop = want;
+    Auto.applying = false;
+    if (Auto.t >= Auto.total) { Auto.t = Auto.total; Auto.paused = true; paintAuto(); }
+  }
+  Auto.raf = requestAnimationFrame(autoTick);
+}
+
+function paintAuto() {
+  const btn = $('#gig-auto');
+  if (btn) {
+    btn.innerHTML = '';
+    btn.appendChild(icon(Auto.on ? 'square' : 'play', 15));
+    btn.setAttribute('aria-label', Auto.on ? 'Stop auto-scroll' : 'Auto-scroll the chart in time with the song');
+    btn.classList.toggle('on', Auto.on);
+  }
+  const pb = $('#gig-pause');
+  if (pb) {
+    pb.innerHTML = '';
+    pb.appendChild(icon(Auto.paused ? 'play' : 'pause', 15));
+    pb.setAttribute('aria-label', Auto.paused ? 'Resume scrolling' : 'Pause scrolling');
+  }
+  const sl = $('#gig-speed');
+  if (sl && document.activeElement !== sl) sl.value = String(speedOf());
+  const txt = $('#gig-speed-txt');
+  if (txt) {
+    const sp = speedOf();
+    const set = parseFloat(song().bpm) > 0;
+    txt.textContent = `${sp.toFixed(2)}×  ·  ${Math.round(autoBpm() * sp)} bpm${set ? '' : ' (no bpm set)'}`
+      + (Auto.paused ? '  ·  paused' : '');
+  }
+}
+let speedT = null;
+function autoSpeed(v) {
+  autoResync();                                  /* the new speed starts now, not retroactively */
+  song().gigSpeed = Math.min(2, Math.max(0.5, Math.round(v * 100) / 100));
+  paintAuto();
+  clearTimeout(speedT);
+  speedT = setTimeout(() => save(), 600);        /* one write when the finger stops */
+}
+
+/* Taking over by hand pauses it and keeps the place you scrolled to, so
+   resuming carries on from there instead of snapping back. */
+let handT = null;
+function autoHandOff() {
+  if (!Auto.on || Auto.applying) return;
+  if (!Auto.paused) autoPause(true);
+  clearTimeout(handT);
+  handT = setTimeout(() => { Auto.t = autoTimeFor($('#gig-body').scrollTop); autoResync(); }, 260);
+}
+
 /* ─── PDF ───────────────────────────────────────────────────────
    The print stylesheet already lays the chart out cleanly, so "Save as PDF"
    in the browser's print dialog is the export — no library, no server,
@@ -1808,7 +2299,50 @@ function exportPDF() {
   window.print();
 }
 
-/* ─── backup / restore (JSON, from the Songs drawer) ────────────── */
+/* ─── backup / restore (JSON, from the Songs drawer) ──────────────
+   The account is one copy and this device is another, but both belong to the
+   same two systems. A file you can hold is the third: it opens on any
+   machine, it can be mailed to someone, and it restores into a brand new
+   account. Restoring never overwrites — a song already here is left alone and
+   an edited one arrives beside it, because a backup is for getting things
+   back, not for losing today's work to last week's file. */
+const BACKUP_FORMAT = 'song-structure/library-1';
+const stripStamp = so => { const c = JSON.parse(JSON.stringify(so)); delete c.updated; return JSON.stringify(c); };
+
+function saveFile(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const a = el('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 8000);
+}
+const stampName = () => new Date().toISOString().slice(0, 10);
+
+/* every song, every setlist, and — if you say so — the files too */
+async function exportAll() {
+  const payload = {
+    format: BACKUP_FORMAT,
+    taken: new Date().toISOString(),
+    songs: JSON.parse(JSON.stringify(state.songs)),
+    setlists: JSON.parse(JSON.stringify(state.setlists)),
+    media: {}
+  };
+  const a = await mediaAudit();
+  if (a.have.length) {
+    const mb = Math.max(1, Math.round(a.bytes / 1048576 * 1.37));
+    const yes = await ask(
+      `${a.have.length} audio and image file${a.have.length === 1 ? '' : 's'} are on this device. Including them makes the backup about ${mb} MB instead of a few hundred KB — do it if this file is your only copy. Cancel backs up the charts alone.`,
+      'Include the files');
+    if (yes) {
+      toast('Packing the files…');
+      for (const id of a.have) { const rec = await Media.toDataURL(id); if (rec) payload.media[id] = rec; }
+    }
+  }
+  const n = payload.songs.length, files = Object.keys(payload.media).length;
+  saveFile(`song-structure-${stampName()}.json`, JSON.stringify(payload));
+  toast(`Backed up ${n} song${n === 1 ? '' : 's'}${files ? ` and ${files} file${files === 1 ? '' : 's'}` : ' (charts only)'}`);
+}
+
+/* one song, with its audio — for handing a single chart to someone else */
 async function exportSong() {
   const s = JSON.parse(JSON.stringify(song()));
   const blobs = {};
@@ -1816,23 +2350,68 @@ async function exportSong() {
     for (const m of owner.media || []) { const d = await Media.toDataURL(m.id); if (d) blobs[m.id] = d; }
   };
   await collect(s);
+  if (s.track) { const d = await Media.toDataURL(s.track.id); if (d) blobs[s.track.id] = d; }
   for (const sec of s.sections) { await collect(sec); for (const b of sec.bars) await collect(b); }
-  const url = URL.createObjectURL(new Blob([JSON.stringify({ format: 'song-structure/1', song: s, media: blobs }, null, 2)],
-    { type: 'application/json' }));
-  const a = el('a'); a.href = url;
-  a.download = (s.title || 'song').replace(/[^\w\- ]+/g, '') + '.songstructure.json';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  saveFile((s.title || 'song').replace(/[^\w\- ]+/g, '') + '.songstructure.json',
+           JSON.stringify({ format: 'song-structure/1', song: s, media: blobs }, null, 2));
   toast('Exported (media included)');
 }
-async function importSong(file) {
-  const data = JSON.parse(await file.text());
+
+/* ── restore ─────────────────────────────────────────────────── */
+async function importFile(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch (_) { toast('That file is not a Song Structure backup'); return; }
+  if (Array.isArray(data.songs)) return importLibrary(data);
+  if (data.song || data.sections) return importSong(data);
+  toast('That file is not a Song Structure backup');
+}
+
+async function importLibrary(data) {
+  const mine = Object.fromEntries(state.songs.map(s => [s.id, s]));
+  const map = {};
+  let added = 0, same = 0, beside = 0;
+
+  for (const so of data.songs || []) {
+    if (!so || !Array.isArray(so.sections)) continue;
+    const cur = mine[so.id];
+    if (!cur) { state.songs.push(so); map[so.id] = so.id; added++; }
+    else if (stripStamp(cur) === stripStamp(so)) { map[so.id] = cur.id; same++; }
+    else {
+      const copy = JSON.parse(JSON.stringify(so));
+      copy.id = uid('s');
+      copy.title = `${so.title || 'Untitled'} (from backup)`;
+      copy.updated = Date.now();
+      state.songs.push(copy); map[so.id] = copy.id; beside++;
+    }
+  }
+  let lists = 0;
+  for (const l of data.setlists || []) {
+    if (!l || state.setlists.some(x => x.id === l.id)) continue;
+    state.setlists.push({ id: l.id, name: l.name || 'Setlist', note: l.note || '',
+                          songs: (l.songs || []).map(id => map[id]).filter(Boolean), updated: Date.now() });
+    lists++;
+  }
+  let files = 0;
+  for (const [id, rec] of Object.entries(data.media || {})) {
+    try { await Media.fromDataURL(id, rec); files++; } catch (_) {}
+  }
+  if (lists) saveLists();
+  save(); render(); renderSongs();
+  if (Cloud.ready) Cloud.syncAll();
+  toast(`Restored: ${added} new, ${beside} kept beside an edited copy, ${same} already here`
+        + (lists ? ` · ${lists} setlist${lists === 1 ? '' : 's'}` : '')
+        + (files ? ` · ${files} file${files === 1 ? '' : 's'}` : ''));
+}
+
+async function importSong(data) {
   const s = data.song || data;
   if (!s.sections) { toast('Not a song file'); return; }
   s.id = uid('s'); s.updated = Date.now();
   for (const [id, rec] of Object.entries(data.media || {})) await Media.fromDataURL(id, rec);
   state.songs.push(s); state.currentId = s.id;
-  save(); render();
+  save(); render({ top: true }); renderSongs();
+  if (Cloud.ready) Cloud.syncAll();
   toast(`Imported "${s.title || 'Untitled'}"`);
 }
 
@@ -1929,7 +2508,7 @@ $('#btn-add-section').onclick = sectionDialog;
 $('#btn-songs').onclick    = openDrawer;
 $('#drawer-close').onclick = closeDrawer;
 $('#drawer-scrim').onclick = closeDrawer;
-$('#btn-new-song').onclick = () => { const s = blankSong(); state.songs.push(s); state.currentId = s.id; save(); render(); $('#song-title').focus(); };
+$('#btn-new-song').onclick = () => { const s = blankSong(); state.songs.push(s); state.currentId = s.id; save(); render({ top: true }); $('#song-title').focus(); };
 $('#btn-pdf').onclick      = exportPDF;
 $('#btn-gig').onclick      = gigOn;
 $('#gig-close').onclick    = gigOff;
@@ -1937,6 +2516,22 @@ $('#gig-pos').onclick      = toggleJump;
 $('#gig-body').addEventListener('pointerdown', closeJump);
 $('#gig-prev').onclick     = () => gigStep(-1);
 $('#gig-next').onclick     = () => gigStep(1);
+$('#gig-auto').onclick     = () => Auto.on ? autoStop() : autoStart();
+$('#gig-pause').onclick    = () => autoPause();
+$('#gig-restart').onclick  = autoRestart;
+$('#gig-speed').oninput    = e => autoSpeed(parseFloat(e.target.value));
+/* a finger or a wheel takes priority over the clock */
+$('#gig-body').addEventListener('wheel', autoHandOff, { passive: true });
+$('#gig-body').addEventListener('touchmove', autoHandOff, { passive: true });
+/* a plain tap anywhere on the chart pauses and resumes — the biggest target
+   on the screen, for the moment the singer stretches a bar */
+let gigTap = null;
+$('#gig-body').addEventListener('pointerdown', e => { gigTap = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+$('#gig-body').addEventListener('pointerup', e => {
+  const st = gigTap; gigTap = null;
+  if (!Auto.on || !st) return;
+  if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500) autoPause();
+});
 $('#gig-bigger').onclick   = () => { gigScale += 0.12; applyGigScale(); };
 $('#gig-smaller').onclick  = () => { gigScale -= 0.12; applyGigScale(); };
 $('#tab-songs').onclick    = () => showTab('songs');
@@ -1947,9 +2542,9 @@ $('#btn-save').onclick     = saveNow;
 $('#btn-cloud').onclick    = cloudDialog;
 $('#btn-theme').onclick     = cycleTheme;
 $('#btn-account').onclick  = () => { closeDrawer(); cloudDialog(); };
-$('#btn-backup').onclick   = exportSong;
+$('#btn-backup').onclick   = exportAll;
 $('#btn-restore').onclick  = () => $('#import-file').click();
-$('#import-file').onchange = e => { if (e.target.files[0]) importSong(e.target.files[0]); e.target.value = ''; };
+$('#import-file').onchange = e => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; };
 $('#viewer-close').onclick = closeViewer;
 $('#viewer').onclick = e => { if (e.target.id === 'viewer') closeViewer(); };
 
@@ -2045,6 +2640,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape')     { e.preventDefault(); if (!$('#gig-jump').hidden) closeJump(); else gigOff(); }
     if (e.key === 'ArrowRight') { e.preventDefault(); gigStep(1); }
     if (e.key === 'ArrowLeft')  { e.preventDefault(); gigStep(-1); }
+    if (e.key === ' ') { e.preventDefault(); Auto.on ? autoPause() : autoStart(); }
     if (e.key === '+' || e.key === '=') { e.preventDefault(); gigScale += 0.12; applyGigScale(); }
     if (e.key === '-' || e.key === '_') { e.preventDefault(); gigScale -= 0.12; applyGigScale(); }
     return;
@@ -2064,10 +2660,19 @@ document.addEventListener('keydown', e => {
   if (e.key === 'g' || e.key === 'G') { e.preventDefault(); gigOn(); }
 });
 
+/* the mapping from musical time to pixels is a function of the layout */
+window.addEventListener('resize', () => {
+  if (!gigIsOn()) return;
+  fitGigChords();
+  if (Auto.on) autoBuild();
+});
+
 /* icons declared in the markup */
 document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.icon, 15)));
 applyTheme();
 $('#logo').appendChild(icon('music', 17));
 
 render();
+paintAuto();
 Cloud.init();
+recoverFromVault();

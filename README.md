@@ -118,6 +118,21 @@ cue is on, including the line under each bar. `A−` / `A+` scales the whole cha
 however far away the stand is and remembers where you left it, and the screen is kept
 awake while gig mode is up. `✕` or `Esc` leaves.
 
+**Auto-scroll** is the ▷ in the gig bar (or `Space`). The chart is paced by the music,
+not by pixels: each row stays on screen for exactly as long as the music written on it —
+bars × beats-per-bar × the region's repeat, at the song's BPM — so a `×4` chorus drawn
+once holds for all four passes and nothing drifts out of time over a five-minute song.
+The bar being played sits about a third of the way down rather than at the top, because
+you read ahead of what you are playing; that is also why the first screenful holds still
+while the music catches up to that line, with no special case for it. Time comes from the
+clock, not from counting frames, so a throttled repaint is a moment it catches up on
+rather than a second it loses.
+
+The strip under the bar has pause, back-to-the-top, and a slow/fast slider from 0.5× to
+2× showing the effective tempo. **The speed is remembered on the song**, not on the
+device — the pace you read a chart at is a fact about that chart. Tapping anywhere on the
+chart pauses and resumes; scrolling by hand takes over and resumes from where you put it.
+
 ### Setlists
 
 A setlist is one gig: a named, ordered list of songs, in the second tab of the drawer.
@@ -125,6 +140,12 @@ A setlist is one gig: a named, ordered list of songs, in the second tab of the d
 name in the gig bar drops down a list to jump to any song in it. Setlists hold ids, not
 copies — deleting a song only takes it out of the running order — and they sync with your
 songs when you are signed in.
+
+Setlists are also **folders**. In the Songs tab a song filed into a setlist sits under
+that setlist rather than in the long flat list, and what is left at the bottom, under
+*Not in a setlist*, is only what has not been filed yet. A song in two setlists shows
+under both — it is one song, not a copy. The ≡ on any song row files it into a setlist or
+takes it out, and the search box above cuts through the folders to every matching song.
 
 ### Touch
 
@@ -246,6 +267,22 @@ What the tool suggested and I did **not** take: its palette (video-pink on navy)
 
 ## Storage
 
-Song text lives in `localStorage` (`song-structure.v1`), media blobs in IndexedDB
-(`song-structure`). Both are per-browser and per-origin. Nothing is uploaded anywhere.
-**Export anything you care about** — clearing site data wipes both.
+Song text is written **twice on every save**: to `localStorage` (`song-structure.v1`),
+which is what the app boots from because it is synchronous, and to the `vault` store in
+IndexedDB (`song-structure`, alongside the media blobs). `localStorage` is a small box a
+browser is allowed to empty on its own, and when it does, a device with no signal has
+nothing to show. So the boot compares the two and **puts back anything the quick slot has
+lost** — it only ever adds, because a song deleted on purpose must stay deleted. A
+`localStorage` write that fails says so instead of being swallowed.
+
+The Songs tab says what this device is actually holding: how many charts, how many
+attachments are here rather than only in the account, and when it last agreed with the
+server. **Get _n_ for offline** downloads the attachments this device has not got, which
+is what makes a chart complete with the phone in airplane mode. (A clip is not a file of
+its own — it is a start and an end inside the song's mp3 — so fetching that one mp3 makes
+every clip taken from it play offline.)
+
+**Back up all** writes every song and setlist to one JSON file, optionally with the audio
+and images on this device. It restores on any machine and into a brand new account, and
+restoring never overwrites: a song already there is left alone, an edited one arrives
+beside it as *(from backup)*, and an identical one is skipped rather than duplicated.
