@@ -476,6 +476,9 @@ function trackURL(t) {
   return p;
 }
 function trackMissingReason(t) {
+  /* the case that matters at a gig: signed in, but the file was never pulled
+     down and there is no signal in the room to pull it now */
+  if (!navigator.onLine) return 'This file is not on this device, and there is no signal to fetch it. Get the files beforehand with “Get … for offline” in Songs.';
   if (!Cloud.user) return 'This song was added on another device. Sign in to bring it over.';
   if (!t.remote)   return 'This song was never uploaded. Open it on the device that has it and press Sync.';
   return 'Could not fetch the song from the server.';
@@ -2580,9 +2583,10 @@ async function exportAll() {
   const a = await mediaAudit();
   if (a.have.length) {
     const mb = Math.max(1, Math.round(a.bytes / 1048576 * 1.37));
+    const one = a.have.length === 1;
     const yes = await ask(
-      `${a.have.length} audio and image file${a.have.length === 1 ? '' : 's'} are on this device. Including them makes the backup about ${mb} MB instead of a few hundred KB — do it if this file is your only copy. Cancel backs up the charts alone.`,
-      'Include the files');
+      `${a.have.length} audio and image file${one ? ' is' : 's are'} on this device. Including ${one ? 'it' : 'them'} makes the backup about ${mb} MB instead of a few hundred KB — do it if this file is your only copy. Cancel backs up the charts alone.`,
+      one ? 'Include the file' : 'Include the files');
     if (yes) {
       toast('Packing the files…');
       for (const id of a.have) { const rec = await Media.toDataURL(id); if (rec) payload.media[id] = rec; }

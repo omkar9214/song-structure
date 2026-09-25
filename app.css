@@ -623,8 +623,12 @@ body.gig-on{overflow:hidden}
 
 /* ── print ──────────────────────────────────────────────── */
 @media print{
-  .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.barline-btn,.barline-add,.add-section-row,
-  .drawer,.viewer,.toast,.tip,.gig,.sheet-menu{display:none!important}
+  /* Paper gets the chart and nothing that only works on a screen: no audio
+     player, no buttons to add or open anything, no carets on the regions. */
+  .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.add-bar,.barline-btn,.barline-add,.add-section-row,
+  .drawer,.viewer,.toast,.tip,.gig,.sheet-menu,
+  .track-bar,.r-caret,.micon,.m-icons,.skip-link{display:none!important}
+  .r-mid{padding:0 8px}                       /* the caret is gone, so is its gutter */
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}
   .sect{break-inside:avoid}
