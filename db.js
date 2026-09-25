@@ -15,7 +15,18 @@ function dbOpen() {
       if (!db.objectStoreNames.contains(STORE_MEDIA)) db.createObjectStore(STORE_MEDIA, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(STORE_VAULT)) db.createObjectStore(STORE_VAULT, { keyPath: 'id' });
     };
-    r.onsuccess = () => res(r.result);
+    /* Another tab still holding version 1 blocks this upgrade, and a blocked
+       open never settles — so say so out loud rather than leaving every
+       attachment silently unavailable. The chart itself does not wait on this. */
+    r.onblocked = () => {
+      console.warn('[db] upgrade blocked by another tab');
+      if (typeof toast === 'function') toast('Close the app\'s other tabs — this one cannot reach its files until you do');
+    };
+    r.onsuccess = () => {
+      /* and if a newer tab wants to upgrade later, get out of its way */
+      r.result.onversionchange = () => { try { r.result.close(); } catch (_) {} DBP = null; };
+      res(r.result);
+    };
     r.onerror = () => rej(r.error);
   });
   return DBP;
