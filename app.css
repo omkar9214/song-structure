@@ -97,7 +97,8 @@ button{cursor:pointer;touch-action:manipulation}
   padding:2px 0;outline:none;border-bottom:1px solid transparent}
 .title-in:hover{border-bottom-color:var(--line)}
 .title-in:focus{border-bottom-color:var(--accent)}
-.title-in::placeholder{color:var(--line-strong)}
+.title-in:empty::before{color:var(--line-strong)}
+.artist-in:empty::before{color:var(--line-strong)}
 .artist-in{width:100%;border:none;background:transparent;color:var(--muted);font-size:13.5px;padding:3px 0;outline:none;
   border-bottom:1px solid transparent}
 .artist-in:hover{border-bottom-color:var(--line)}
@@ -107,7 +108,7 @@ button{cursor:pointer;touch-action:manipulation}
   text-transform:uppercase;color:var(--muted);background:var(--panel);border:1px solid var(--line);
   border-radius:8px;padding:4px 8px 4px 10px;transition:border-color var(--t)}
 .meta:hover{border-color:var(--line-strong)}
-.meta input,.meta select{width:58px;border:none;background:transparent;padding:2px 0;font-size:13.5px;
+.meta input,.meta select,.meta .key-in{width:58px;border:none;background:transparent;padding:2px 0;font-size:13.5px;
   font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink);outline:none}
 .meta select{width:auto;cursor:pointer}
 .stat{font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px dashed var(--line-strong);
@@ -152,7 +153,7 @@ button{cursor:pointer;touch-action:manipulation}
 .r-name{border:none;background:transparent;outline:none;text-align:center;font-size:12.5px;font-weight:650;
   letter-spacing:.03em;color:#fff;padding:1px 4px;min-width:44px;max-width:100%;border-radius:4px;
   text-overflow:ellipsis}
-.r-name::placeholder{color:rgba(255,255,255,.6)}
+.r-name:empty::before{color:rgba(255,255,255,.6)}
 .r-name:hover:not([readonly]){background:rgba(255,255,255,.14)}
 .r-name:focus{background:rgba(255,255,255,.22)}
 .r-rep{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.16);color:#fff;border-radius:99px;
@@ -237,10 +238,20 @@ body.is-dragging .measure{cursor:grabbing}
   font-size:19px;font-weight:600;letter-spacing:-.01em;padding:3px 0;min-width:0;
   border-bottom:1.5px solid transparent;transition:border-color var(--t)}
 .beat.solo{font-size:31px;font-weight:600;letter-spacing:-.03em}
-.beat::placeholder{color:transparent}
-.measure:hover .beat:placeholder-shown{border-bottom-color:var(--line-strong)}
+.measure:hover .beat:empty{border-bottom-color:var(--line-strong)}
 .beat:focus{border-bottom-color:var(--accent)}
 .m-chords.split .beat{font-size:19px}
+
+/* These are editable divs, not inputs — see textBox() in app.js. They need
+   the three things an <input> gave them for free: a caret cursor, a line's
+   worth of height when empty, and one line that never wraps. */
+.title-in,.artist-in,.key-in,.r-name,.beat,.m-lyric{cursor:text;white-space:pre;overflow:hidden;
+  min-height:1.2em;-webkit-user-modify:read-write-plaintext-only}
+.title-in:empty::before,.artist-in:empty::before,.key-in:empty::before,
+.r-name:empty::before,.beat:empty::before,.m-lyric:empty::before{content:attr(data-ph)}
+.beat:empty::before,.m-lyric:empty::before{content:'\200b'}      /* holds the line open, shows nothing */
+.r-name{display:inline-block}
+.key-in{min-width:2.2em}
 
 /* The cue under a bar is the thing you read on stage, so it is always on —
    never hidden behind a hover. Empty ones show nothing but a rule when the
@@ -248,8 +259,7 @@ body.is-dragging .measure{cursor:grabbing}
 .m-lyric{position:absolute;left:5px;right:5px;bottom:3px;border:none;background:transparent;outline:none;
   font-size:11.5px;font-weight:500;color:var(--ink-2);padding:1px 2px;text-align:center;border-radius:4px;
   text-overflow:ellipsis;border-bottom:1px solid transparent}
-.m-lyric::placeholder{color:transparent}
-.measure:hover .m-lyric:placeholder-shown{border-bottom-color:var(--line)}
+.measure:hover .m-lyric:empty{border-bottom-color:var(--line)}
 .m-lyric:focus{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--accent);border-bottom-color:transparent}
 
 .m-icons{position:absolute;right:4px;bottom:4px;display:flex;gap:3px;z-index:2}
@@ -527,7 +537,7 @@ body.gig-on{overflow:hidden}
      it cannot go off by accident. */
   .m-grip,.measure:hover .m-grip,.measure:focus-within .m-grip{display:none}
   .barline-btn,.barline-add{display:none}      /* in the sheet instead — see app.js */
-  .m-lyric:placeholder-shown{border-bottom:1px dotted var(--line)}
+  .m-lyric:empty{border-bottom:1px dotted var(--line)}
   .m-lyric:focus{border-bottom-color:transparent}
   .ibtn,.m-grip{width:36px;height:34px}
   .tab{padding:11px 10px}
@@ -548,7 +558,7 @@ body.gig-on{overflow:hidden}
   .measure{height:100px}
   .m-chords{padding-bottom:28px}              /* the cue line keeps its own band */
   .m-lyric{font-size:16px;bottom:5px}
-  .meta input,.meta select,#song-artist,.r-name,.list-select,
+  .meta input,.meta select,.meta .key-in,#song-artist,.r-name,.list-select,.song-find-in,
   .dlg input,.dlg select,.field input,.field select,.time-in,.r-rep-in{font-size:16px}
   .r-name{padding:2px 6px}
   .micon{width:30px;height:30px}

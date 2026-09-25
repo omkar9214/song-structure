@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260925-5">
+<link rel="stylesheet" href="app.css?v=20260925-6">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -41,10 +41,13 @@
   <h1 class="sr-only" id="doc-h1">Song structure chart</h1>
 
   <section class="song-head">
-    <input class="title-in" id="song-title" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Song title" spellcheck="false" aria-label="Song title">
-    <input class="artist-in" id="song-artist" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Artist / notes" spellcheck="false">
+    <div class="title-in" id="song-title" contenteditable="plaintext-only" role="textbox" tabindex="0"
+         spellcheck="false" autocorrect="off" data-ph="Song title" aria-label="Song title"></div>
+    <div class="artist-in" id="song-artist" contenteditable="plaintext-only" role="textbox" tabindex="0"
+         spellcheck="false" autocorrect="off" data-ph="Artist / notes" aria-label="Artist or notes"></div>
     <div class="meta-row">
-      <label class="meta" data-tip="The key the song is in — for your own reference"><span>Key</span><input id="song-key" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="C" spellcheck="false"></label>
+      <label class="meta" data-tip="The key the song is in — for your own reference"><span>Key</span><div id="song-key" class="key-in" contenteditable="plaintext-only" role="textbox" tabindex="0"
+        spellcheck="false" autocorrect="off" data-ph="C" aria-label="Key the song is in"></div></label>
       <label class="meta" data-tip="Tempo. Drives the running-time estimate"><span>BPM</span><input id="song-bpm" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" type="number" min="20" max="300" placeholder="120"></label>
       <label class="meta" data-tip="Time signature — sets how many beats a bar holds"><span>Time</span>
         <select id="song-time">
@@ -387,10 +390,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260925-5"></script>
-<script src="icons.js?v=20260925-5"></script>
-<script src="db.js?v=20260925-5"></script>
-<script src="cloud.js?v=20260925-5"></script>
-<script src="app.js?v=20260925-5"></script>
+<script src="config.js?v=20260925-6"></script>
+<script src="icons.js?v=20260925-6"></script>
+<script src="db.js?v=20260925-6"></script>
+<script src="cloud.js?v=20260925-6"></script>
+<script src="app.js?v=20260925-6"></script>
 </body>
 </html>

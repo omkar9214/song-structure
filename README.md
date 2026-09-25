@@ -147,6 +147,25 @@ that setlist rather than in the long flat list, and what is left at the bottom, 
 under both — it is one song, not a copy. The ≡ on any song row files it into a setlist or
 takes it out, and the search box above cuts through the folders to every matching song.
 
+### Why the chart is not made of `<input>`s
+
+A browser's own password manager offers its list of saved logins on any form
+field it finds focused, whatever the page says about itself, and iOS puts an
+AutoFill bar over the keyboard for the same reason — so tapping a chord got a
+dropdown of unrelated websites. Telling managers to ignore the field does not
+help, because the decision is not made per field.
+
+So the chart is not made of form fields. Chords, cue lines, region names and
+the song's title, artist and key are editable text elements — same look, same
+typing, same keyboard moves, but not something a browser can mistake for a
+login box. `textBox()` in `app.js` builds them: plain text only, Enter moves to
+the next bar rather than starting a paragraph, and a paste arrives as text.
+
+The dialogs keep real inputs, and the sign-in dialog is the one real `<form>`.
+Its password and email fields are ordinary text until it opens, so at rest the
+page holds no credential field at all — and while you are deliberately signing
+in, saving a password works exactly as it should.
+
 ### Touch
 
 There is no hover on a touch screen, and Safari fires `:hover` on a tap, so the tool row

@@ -249,11 +249,18 @@ function render(opts) {
   if (toTop) { heldY = 0; window.scrollTo(0, 0); }
   else if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
 }
+/* Setting the text of an editable div moves the caret to the start, so a
+   rebuild that happens while you are typing in one must leave it alone. */
+function setText(sel, v) {
+  const n = $(sel);
+  if (!n || n === document.activeElement) return;
+  if (n.textContent !== (v || '')) n.textContent = v || '';
+}
 function paint() {
   const s = song();
-  $('#song-title').value  = s.title;
-  $('#song-artist').value = s.artist;
-  $('#song-key').value    = s.key;
+  setText('#song-title', s.title);
+  setText('#song-artist', s.artist);
+  setText('#song-key', s.key);
   $('#song-bpm').value    = s.bpm || '';
   $('#song-time').value   = s.time;
   document.title = s.title ? `${s.title} — Song Structure` : 'Song Structure';
@@ -582,12 +589,11 @@ function regionStrip(sec, idx) {
   r.appendChild(caret);
 
   const mid = el('div', 'r-mid');
-  const name = el('input', 'r-name');
-  name.value = sec.name; name.spellcheck = false; name.placeholder = 'region name';
-  name.setAttribute('aria-label', 'Region name');
-  const fit = () => name.size = Math.max(5, (name.value || name.placeholder).length);
-  fit();
-  name.oninput = () => { sec.name = name.value; fit(); save(); renderRoadmap(); };
+  const name = textBox('r-name', sec.name, {
+    label: 'Region name',
+    placeholder: 'region name',
+    oninput: v => { sec.name = v; save(); renderRoadmap(); }
+  });
   mid.appendChild(name);
 
   if (repeatEdit === sec.id) {
@@ -724,11 +730,11 @@ function measure(sec, it, firstInRow) {
   const tools = el('div', 'm-tools');
   acts.forEach(a => tools.appendChild(tool(a.icon, a.tip, a.run, a.danger ? 'danger' : '')));
 
-  const lyric = el('input', 'm-lyric');
-  lyric.value = bar.lyric || ''; lyric.placeholder = '\u2026'; lyric.spellcheck = false;
-  lyric.setAttribute('aria-label', `Lyric or cue under bar ${no}`);
+  const lyric = textBox('m-lyric', bar.lyric || '', {
+    label: `Lyric or cue under bar ${no}`,
+    oninput: v => { bar.lyric = v; lyric.classList.toggle('has', !!v); save(); }
+  });
   lyric.dataset.tip = 'A lyric or short cue for this bar';
-  lyric.oninput = () => { bar.lyric = lyric.value; lyric.classList.toggle('has', !!lyric.value); save(); };
   if (bar.lyric) lyric.classList.add('has');
 
   const icons = el('div', 'm-icons');
@@ -917,6 +923,64 @@ function splitBar(sec, i) {
   save(); render();
 }
 
+/* ─── a text box that is not a form field ────────────────────────
+   A browser's password manager offers its saved logins on any <input> it
+   finds focused, whatever the page says about itself — and the iOS keyboard
+   puts an AutoFill bar up for the same reason. Neither attaches to an
+   editable element that is not a form control. So the chart is written in
+   these instead: same look, same typing, same keyboard moves, but nothing a
+   browser can mistake for a login box. The dialogs keep real inputs — a
+   manager appearing while you deliberately sign in is the point of it. */
+function textBox(cls, value, o) {
+  const n = el('div', cls);
+  n.contentEditable = 'plaintext-only';
+  if (n.contentEditable !== 'plaintext-only') n.contentEditable = 'true';   /* older WebKit */
+  n.spellcheck = false;
+  n.textContent = value || '';
+  n.tabIndex = 0;
+  n.setAttribute('role', 'textbox');
+  n.setAttribute('autocorrect', 'off');
+  if (o.label) n.setAttribute('aria-label', o.label);
+  if (o.placeholder) n.dataset.ph = o.placeholder;
+  n.addEventListener('input', () => {
+    /* a browser may still slip an element in; this stays plain text */
+    if (n.firstElementChild) { const t = n.textContent; n.textContent = t; caretToEnd(n); }
+    o.oninput && o.oninput(n.textContent, n);
+  });
+  n.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); o.onenter && o.onenter(e); return; }
+    o.onkey && o.onkey(e);
+  });
+  n.addEventListener('paste', e => {
+    e.preventDefault();
+    const t = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\s+/g, ' ');
+    document.execCommand('insertText', false, t);
+  });
+  return n;
+}
+/* where the caret is, for the arrow keys that step between bars */
+function caretAt(n) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !n.contains(sel.anchorNode)) return 'mid';
+  const r = sel.getRangeAt(0);
+  if (!r.collapsed) return 'mid';
+  const pre = r.cloneRange();
+  pre.selectNodeContents(n);
+  pre.setEnd(r.endContainer, r.endOffset);
+  const before = pre.toString().length, total = n.textContent.length;
+  if (!total) return 'both';
+  if (!before) return 'start';
+  return before === total ? 'end' : 'mid';
+}
+function caretToEnd(n) {
+  const r = document.createRange();
+  r.selectNodeContents(n); r.collapse(false);
+  const s = window.getSelection();
+  s.removeAllRanges(); s.addRange(r);
+}
+/* focus a box and leave the caret where you would carry on typing */
+function focusBox(n) { if (!n) return; n.focus({ preventScroll: true }); caretToEnd(n); }
+
 /* ─── fitting long chords ───────────────────────────────────────
    "Cmaj7#11/G" must not spill out of its bar. Measure the text and shrink
    the type until it fits, down to a floor where it is still readable.
@@ -937,7 +1001,7 @@ function baseSizeFor(inp) {
 }
 
 function fitChord(inp) {
-  const v = inp.value;
+  const v = inp.textContent;
   const b = baseSizeFor(inp);
   if (!v) { inp.style.fontSize = ''; return; }
   const avail = inp.clientWidth - 6;
@@ -954,30 +1018,31 @@ function fitAllChords() {
 }
 
 function beatInput(bar, bi, m, chords, solo) {
-  const inp = el('input', 'beat' + (solo ? ' solo' : ''));
-  inp.value = bar.beats[bi] || '';
-  inp.spellcheck = false;
   const where = solo ? `bar ${m.dataset.no}` : `bar ${m.dataset.no}, field ${bi + 1}`;
-  inp.setAttribute('aria-label', `Chord for ${where}`);
-  inp.oninput = () => { bar.beats[bi] = inp.value; fitChord(inp); save(); };
-  inp.onkeydown = e => {
-    if (e.key === 'Enter') { e.preventDefault(); step(m, 1); }
-    else if (e.key === 'Backspace' && !inp.value && bi > 0 && !solo) { e.preventDefault(); chords.children[bi - 1].focus(); }
-    else if (e.key === 'ArrowRight' && inp.selectionStart === inp.value.length) {
-      e.preventDefault();
-      (!solo && bi < bar.beats.length - 1) ? chords.children[bi + 1].focus() : step(m, 1);
-    } else if (e.key === 'ArrowLeft' && inp.selectionStart === 0) {
-      e.preventDefault();
-      (!solo && bi > 0) ? chords.children[bi - 1].focus() : step(m, -1);
+  const n = textBox('beat' + (solo ? ' solo' : ''), bar.beats[bi] || '', {
+    label: `Chord for ${where}`,
+    oninput: v => { bar.beats[bi] = v; fitChord(n); save(); },
+    onenter: () => step(m, 1),
+    onkey: e => {
+      const at = caretAt(n);
+      if (e.key === 'Backspace' && !n.textContent && bi > 0 && !solo) {
+        e.preventDefault(); focusBox(chords.children[bi - 1]);
+      } else if (e.key === 'ArrowRight' && (at === 'end' || at === 'both')) {
+        e.preventDefault();
+        (!solo && bi < bar.beats.length - 1) ? focusBox(chords.children[bi + 1]) : step(m, 1);
+      } else if (e.key === 'ArrowLeft' && (at === 'start' || at === 'both')) {
+        e.preventDefault();
+        (!solo && bi > 0) ? focusBox(chords.children[bi - 1]) : step(m, -1);
+      }
     }
-  };
-  return inp;
+  });
+  return n;
 }
 
 function step(node, dir) {
   const all = [...document.querySelectorAll('.measure:not(.blank):not(.ghost)')];
   const nxt = all[all.indexOf(node) + dir];
-  if (nxt) nxt.querySelector('.beat')[dir > 0 ? 'focus' : 'focus']();
+  if (nxt) focusBox(nxt.querySelector('.beat'));
 }
 
 /* On a touch screen there is no hover, and Safari fires :hover on a tap — so
@@ -2560,11 +2625,27 @@ window.addEventListener('keydown', e => {
 
 /* ─── wiring ────────────────────────────────────────────────────── */
 $('#song-title').oninput  = e => {
-  song().title = e.target.value; save();
-  document.title = e.target.value ? `${e.target.value} — Song Structure` : 'Song Structure';
+  const v = e.target.textContent;
+  song().title = v; save();
+  document.title = v ? `${v} — Song Structure` : 'Song Structure';
 };
-$('#song-artist').oninput = e => { song().artist = e.target.value; save(); };
-$('#song-key').oninput    = e => { song().key = e.target.value; save(); };
+$('#song-artist').oninput = e => { song().artist = e.target.textContent; save(); };
+$('#song-key').oninput    = e => { song().key = e.target.textContent; save(); };
+/* one line each: Enter is not a new paragraph in a song title */
+['#song-title', '#song-artist', '#song-key'].forEach(sel => {
+  const n = $(sel);
+  n.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+  n.addEventListener('paste', e => {
+    e.preventDefault();
+    const t = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\s+/g, ' ');
+    document.execCommand('insertText', false, t);
+  });
+});
+/* the little "Key" caption is still a label: clicking it puts you in the box */
+document.querySelectorAll('.meta').forEach(l => {
+  const box = l.querySelector('[contenteditable]');
+  if (box) l.addEventListener('click', e => { if (e.target !== box) focusBox(box); });
+});
 $('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); };
 $('#song-time').onchange  = e => { song().time = e.target.value; save(); };
 
