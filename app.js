@@ -2262,11 +2262,20 @@ function autoStart() {
   cancelAnimationFrame(Auto.raf);
   Auto.raf = requestAnimationFrame(autoTick);
 }
+/* Stop is not pause. Pause holds your place so the next press carries on
+   from the bar you are in; stop ends the run, so the next press starts the
+   song again from the top. Pressing play after a stop used to lurch forward
+   to wherever the clock had got to, which is the one thing you cannot have
+   happen while a band is counting you in. The chart goes back to the top on
+   the stop — a deliberate press — rather than jumping under you on the play. */
 function autoStop() {
   Auto.on = false; Auto.paused = true;
+  Auto.t = 0; autoResync();
   cancelAnimationFrame(Auto.raf); Auto.raf = 0;
   const bar = $('#gig-scroll');
   if (bar) bar.hidden = true;
+  const body = $('#gig-body');
+  if (body) body.scrollTop = 0;
   paintAuto();
 }
 function autoPause(on) {
