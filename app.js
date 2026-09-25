@@ -2390,7 +2390,13 @@ const ANCHOR = 0.34;                       /* where the played bar sits, top-dow
 const Auto = { on: false, paused: true, raf: 0, t: 0, base: 0, at: 0, plan: null, total: 0, applying: false };
 
 const speedOf = so => Math.min(2, Math.max(0.5, parseFloat((so || song()).gigSpeed) || 1));
-const autoBpm = () => Math.max(20, Math.min(300, parseFloat(song().bpm) || 0)) || 100;
+/* No tempo written on the chart means "I never set one", not "twenty". The
+   clamp used to run first, so an unset bpm came out of Math.max as 20 and the
+   chart crawled. Decide whether there is a tempo, then clamp. */
+const autoBpm = () => {
+  const b = parseFloat(song().bpm);
+  return b > 0 ? Math.max(20, Math.min(300, b)) : 100;
+};
 
 /* time → how far down the chart the music has got */
 function autoBuild() {
