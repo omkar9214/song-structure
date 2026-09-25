@@ -46,9 +46,18 @@ function packRows(bars, startBar) {
 }
 
 /* ─── state ─────────────────────────────────────────────────────── */
-let state = migrate(load());
-
+/* These are read by blankSong(), which load() calls on the very first line of
+   state — so they must be initialised before it. A `const` below that line is
+   in the temporal dead zone when load() reaches it, and the app throws before
+   it has drawn anything. That only happens on a device whose localStorage is
+   empty, which is the one path that never shows up in testing unless you go
+   looking for it. Declare them first. */
 const BLANK_BPM = 120, BLANK_TIME = '4/4';
+
+let state = migrate(load());
+/* an empty chart left behind at the last visit never became a song */
+setTimeout(() => { if (discardDraft()) { writeLocal(); render({ top: true }); } }, 0);
+
 function blankSong() {
   return { id: uid('s'), title: '', artist: '', key: '', bpm: BLANK_BPM, time: BLANK_TIME,
            sections: [], media: [], updated: Date.now() };
@@ -56,14 +65,13 @@ function blankSong() {
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY));
-    if (raw && raw.songs && raw.songs.length) { delete raw.__madeBlank; return raw; }
+    if (raw && raw.songs && raw.songs.length) return raw;
   } catch (_) {}
-  /* Nothing in the quick slot. That is a brand new device — or one whose
-     browser has just emptied it — so the blank song this makes is marked as
-     manufactured, and the vault recovery throws it away rather than leaving
-     you staring at an empty chart with your songs hidden behind it. */
+  /* Nothing in the quick slot: a brand new device, or one whose browser has
+     just emptied it. The empty song this makes is a draft, not a song — see
+     discardDraft() — so it goes as soon as there is a real one to show. */
   const s = blankSong();
-  return { songs: [s], currentId: s.id, __madeBlank: s.id };
+  return { songs: [s], currentId: s.id, __draftId: s.id };
 }
 /* ─── writing to this device ─────────────────────────────────────
    Two copies, always. localStorage is the one the app boots from — it is
@@ -95,6 +103,7 @@ function writeLocal() {
 
 function save(quiet) {
   song().updated = Date.now();
+  if (state.__draftId === song().id && !songIsBlank(song())) delete state.__draftId;   /* written in — it is a song now */
   writeLocal();
   if (!quiet && window.Cloud) Cloud.touch(song());
 }
@@ -123,9 +132,13 @@ async function recoverFromVault() {
 
   const byId = Object.fromEntries(state.songs.map(s => [s.id, s]));
   let back = 0, fresher = 0, listsBack = false;
-  const madeBlank = state.__madeBlank;
+  const draftWas = state.__draftId;
   for (const so of snap.songs) {
     if (so.__setlists) continue;
+    /* An empty song has nothing in it to recover, and putting one back is how
+       a draft you walked away from reappeared a moment after it was dropped.
+       Recovery exists to save work; there is no work in an empty chart. */
+    if (songIsBlank(so)) continue;
     const mine = byId[so.id];
     if (!mine) { state.songs.push(so); back++; }
     else if ((so.updated || 0) > (mine.updated || 0)) { Object.assign(mine, so); fresher++; }
@@ -139,10 +152,9 @@ async function recoverFromVault() {
   if (!back && !fresher && !listsBack) return;
 
   /* put the reader back where they were, not on the empty chart this boot made */
-  const wasCurrent = state.currentId === madeBlank;
-  dropBootBlank();
+  const wasCurrent = state.currentId === draftWas;
+  discardDraft();
   if (wasCurrent && songById(snap.currentId)) state.currentId = snap.currentId;
-  delete state.__madeBlank;
   writeLocal();
   render({ top: true });
   if (!$('#drawer').hidden) showTab(drawerTab);
@@ -185,22 +197,38 @@ function songIsBlank(so) {
 window.songIsBlank = songIsBlank;
 const blankSongs = () => state.songs.filter(songIsBlank);
 
-/* The empty song this boot put on screen, once there is a real one to show
-   instead. Never touches a song that has been written in, and never leaves
-   the app with no song at all. */
-function dropBootBlank() {
-  const id = state.__madeBlank;
-  if (!id) return false;
-  const blank = state.songs.find(x => x.id === id);
-  if (!blank || !songIsBlank(blank)) { delete state.__madeBlank; return false; }
+/* ─── the draft ──────────────────────────────────────────────────
+   An empty chart is not a song yet. One is put on screen when you press New,
+   and when a device with no local copy opens the app — and until you write
+   something in it, it is a draft: it is not sent to the account, and it goes
+   when you walk away from it. Otherwise pressing New twice, or opening the
+   app on a third device, leaves Untitleds behind for ever.
+
+   It is thrown away only if it is still completely empty, never if it is the
+   only song there is, and never the chart you are looking at. */
+function newestOf(list) {
+  return list.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))[0];
+}
+function discardDraft(keepId) {
+  const id = state.__draftId;
+  if (!id || id === keepId) return false;
+  const d = state.songs.find(x => x.id === id);
+  if (!d) { delete state.__draftId; return false; }
+  if (!songIsBlank(d)) { delete state.__draftId; return false; }   /* you wrote in it */
   const others = state.songs.filter(x => x.id !== id);
-  if (!others.length) return false;
+  if (!others.length) return false;                                /* the only song */
   state.songs = others;
   if (state.currentId === id)
-    state.currentId = others.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))[0].id;
-  delete state.__madeBlank;
+    state.currentId = (keepId && others.some(x => x.id === keepId)) ? keepId : newestOf(others).id;
+  delete state.__draftId;
   forget_base(id);
   return true;
+}
+/* the empty chart to reuse when New is pressed again */
+function existingDraft() {
+  const cur = state.songs.find(x => x.id === state.__draftId);
+  if (cur && songIsBlank(cur)) return cur;
+  return newestOf(blankSongs()) || null;
 }
 
 /* ─── what each device last agreed with the server ──────────────
@@ -240,7 +268,7 @@ function take_lists(lists, stamp) {
 /* the cloud layer reads and writes through these two */
 function state_songs() { return state.songs; }
 function onPulled() {
-  dropBootBlank();
+  discardDraft();
   writeLocal();
   state.lastSync = Date.now();
   render();
@@ -2091,6 +2119,7 @@ function moveInList(l, i, d) {
 }
 function openSong(id) {
   if (!songById(id)) return;
+  discardDraft(id);                       /* the empty chart you are leaving was never a song */
   state.currentId = id; saveLocal(); render({ top: true }); renderSongs();
 }
 function openFromDrawer(id) { openSong(id); closeDrawer(); }
@@ -2740,7 +2769,26 @@ $('#btn-add-section').onclick = sectionDialog;
 $('#btn-songs').onclick    = openDrawer;
 $('#drawer-close').onclick = closeDrawer;
 $('#drawer-scrim').onclick = closeDrawer;
-$('#btn-new-song').onclick = () => { const s = blankSong(); state.songs.push(s); state.currentId = s.id; save(); render({ top: true }); $('#song-title').focus(); };
+/* One empty chart at a time. Pressing New while an untouched one already
+   exists takes you to that one rather than starting another Untitled. */
+$('#btn-new-song').onclick = () => {
+  const have = existingDraft();
+  if (have) {
+    const already = have.id === state.currentId;
+    state.__draftId = have.id;
+    state.currentId = have.id;
+    saveLocal(); render({ top: true }); renderSongs();
+    focusBox($('#song-title'));
+    if (already) toast('This chart is still empty — give it a title and it becomes a song');
+    return;
+  }
+  const s = blankSong();
+  state.songs.push(s);
+  state.currentId = s.id;
+  state.__draftId = s.id;
+  saveLocal(); render({ top: true }); renderSongs();
+  focusBox($('#song-title'));
+};
 $('#btn-pdf').onclick      = exportPDF;
 $('#btn-gig').onclick      = gigOn;
 $('#gig-close').onclick    = gigOff;
