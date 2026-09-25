@@ -19,6 +19,7 @@ const $  = s => document.querySelector(s);
    one real <form>. So everything made through el() says so, once, centrally. */
 const NO_FILL = {
   autocomplete: 'off',
+  autocorrect: 'off',            /* chords are not prose — iOS must not rewrite Am7 */
   'data-1p-ignore': '',          /* 1Password  */
   'data-lpignore': 'true',       /* LastPass   */
   'data-bwignore': '',           /* Bitwarden  */
@@ -1340,12 +1341,46 @@ const CLOUD_TEXT = {
   error:   ['Sync failed',    'Something went wrong. Your work is safe on this device; try again.']
 };
 
+/* ─── the sign-in fields only exist while you are signing in ─────
+   A browser's password manager — and the Passwords key iOS puts over the
+   keyboard — offers itself because the *page* holds password fields, not
+   because the field you tapped is one. This page is a hundred chord boxes
+   and one sign-in dialog, so at rest it now holds no password field at all:
+   the two in that dialog are ordinary text, carrying no credential
+   autocomplete token, until the dialog is open — and ordinary text again the
+   moment it closes. Armed, they are exactly what they were, so saving and
+   filling a password when you actually sign in still works. */
+const CLOUD_TOKENS = [['#cloud-pw', 'current-password', 'password'],
+                      ['#cloud-newpw', 'new-password', 'password'],
+                      ['#cloud-email', 'email', 'email'],
+                      ['#cloud-code', 'one-time-code', 'text']];
+let cloudArmed = false;
+function armCloud(on) {
+  if (on === cloudArmed) return;
+  cloudArmed = on;
+  CLOUD_TOKENS.forEach(([sel, token, type]) => {
+    const n = $(sel);
+    if (!n) return;
+    if (on) { n.type = type; n.setAttribute('autocomplete', token); }
+    else {
+      if (type === 'password') n.value = '';     /* never leave one in a text box */
+      n.type = 'text';                           /* an email field is a username to a manager */
+      n.setAttribute('autocomplete', 'off');
+    }
+  });
+}
+/* Escape, the backdrop and the close button all get here, without depending
+   on the dialog's close event — which some embedded browsers never fire. */
+document.addEventListener('focusin', () => { if (!$('#dlg-cloud').open) armCloud(false); });
+
 function cloudDialog(awaitingCode) {
   const d = $('#dlg-cloud');
   msg('');
+  armCloud(true);
   paintCloud(awaitingCode);
   if (!d.open) d.showModal();
 }
+function closeCloud() { armCloud(false); $('#dlg-cloud').close(); }
 
 function msg(text, kind) {
   const p = $('#cloud-msg');
@@ -1375,7 +1410,7 @@ $('#cloud-go').onclick = async () => {
     remember(email);
     msg('Signed in', 'good');
     paintCloud();
-    setTimeout(() => $('#dlg-cloud').close(), 600);
+    setTimeout(closeCloud, 600);
   } catch (e) {
     msg(/invalid/i.test(e.message || '') ? 'Wrong email or password. If you have never set one, use “Email a link”.' : (e.message || 'Could not sign in'), 'bad');
   }
@@ -1388,7 +1423,7 @@ $('#cloud-signup').onclick = async () => {
   try {
     const r = await Cloud.signUpPassword(email, pw);
     remember(email);
-    if (r.signedIn) { msg('Account created — signed in', 'good'); paintCloud(); setTimeout(() => $('#dlg-cloud').close(), 600); }
+    if (r.signedIn) { msg('Account created — signed in', 'good'); paintCloud(); setTimeout(closeCloud, 600); }
     else msg('Account created. Confirm it from the email we sent, then sign in.', 'good');
   } catch (e) {
     msg(/already/i.test(e.message || '') ? 'That account exists — sign in with its password, or use “Email a link”.' : (e.message || 'Could not create the account'), 'bad');
@@ -1440,11 +1475,11 @@ $('#cloud-verify').onclick = async () => {
     await Cloud.verifyCode(email, code);
     msg('Signed in', 'good');
     paintCloud();
-    setTimeout(() => $('#dlg-cloud').close(), 700);
+    setTimeout(closeCloud, 700);
   } catch (e) { msg(e.message || 'That code did not work', 'bad'); }
 };
 
-$('#dlg-cloud').querySelector('[data-close]').onclick = () => $('#dlg-cloud').close();
+$('#dlg-cloud').querySelector('[data-close]').onclick = closeCloud;
 
 $('#cloud-signout').onclick = async () => {
   await Cloud.signOut();

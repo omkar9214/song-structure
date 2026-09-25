@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260925-3">
+<link rel="stylesheet" href="app.css?v=20260925-4">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -175,19 +175,19 @@
 
     <label class="field" id="cloud-email-field">
       <span>Email <b class="req" aria-hidden="true">*</b><span class="sr-only">(required)</span></span>
-      <input id="cloud-email" type="email" autocomplete="email" placeholder="you@example.com" spellcheck="false">
+      <input id="cloud-email" type="text" inputmode="email" autocomplete="off" placeholder="you@example.com" spellcheck="false">
     </label>
 
     <label class="field" id="cloud-pw-field">
       <span>Password</span>
-      <input id="cloud-pw" type="password" autocomplete="current-password" placeholder="••••••••">
+      <input id="cloud-pw" type="text" autocomplete="off" placeholder="••••••••" spellcheck="false">
       <small class="dlg-help">No account yet? Enter a password and press <b>Create account</b>.</small>
     </label>
 
     <div class="field" id="cloud-newpw-field" hidden>
       <label for="cloud-newpw"><span>Set a password</span></label>
       <div class="inline-field">
-        <input id="cloud-newpw" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+        <input id="cloud-newpw" type="text" autocomplete="off" placeholder="at least 6 characters" spellcheck="false">
         <button type="button" class="btn primary" id="cloud-savepw">Save</button>
       </div>
       <small class="dlg-help">Then you can sign in on any device with your email and this password — no waiting for an email.</small>
@@ -195,7 +195,7 @@
 
     <label class="field" id="cloud-code-field" hidden>
       <span>Or paste the code from that email</span>
-      <input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" spellcheck="false">
+      <input id="cloud-code" inputmode="numeric" autocomplete="off" placeholder="123456" spellcheck="false">
       <small class="dlg-help">Only if the link will not open in this browser — it needs <code>{{ .Token }}</code> in your Supabase email template.</small>
     </label>
 
@@ -387,10 +387,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260925-3"></script>
-<script src="icons.js?v=20260925-3"></script>
-<script src="db.js?v=20260925-3"></script>
-<script src="cloud.js?v=20260925-3"></script>
-<script src="app.js?v=20260925-3"></script>
+<script src="config.js?v=20260925-4"></script>
+<script src="icons.js?v=20260925-4"></script>
+<script src="db.js?v=20260925-4"></script>
+<script src="cloud.js?v=20260925-4"></script>
+<script src="app.js?v=20260925-4"></script>
 </body>
 </html>
