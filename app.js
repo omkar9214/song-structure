@@ -2269,7 +2269,20 @@ function gigOn() {
    nothing is said, because there is no action the player could take mid-gig
    anyway. Installing the app to the home screen is the other way to lose the
    browser chrome, and that is in the README, not in a toast. */
+/* iPadOS reports itself as a Mac, so the touch count is what tells them
+   apart — no Mac has one. */
+const isApplePortable = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (/Mac/.test(navigator.platform || navigator.userAgent) && navigator.maxTouchPoints > 1);
+
 function goFullscreen() {
+  /* Not on the iPad. It does grant fullscreen, and then spends it: a floating
+     close button parks itself over the song title, and a swipe anywhere near
+     the top drops straight back out — mid-song, with a guitar in your hands.
+     Neither is something the page can turn off. Installing to the home screen
+     is the answer there and a better one: no browser chrome at all, nothing
+     overlaid, and no gesture that can undo it. */
+  if (isApplePortable()) return;
   const el = document.documentElement;
   const go = el.requestFullscreen || el.webkitRequestFullscreen;
   if (!go || document.fullscreenElement || document.webkitFullscreenElement) return;
@@ -2376,6 +2389,14 @@ function renderGig() {
   }
   let barNo = 1;
   s.sections.forEach(sec => {
+    /* A region whose bars have all been deleted still drew its coloured name
+       strip here — a bar of colour at the end of the chart with no music
+       under it, which is what it looked like on the iPad. Worse, it was
+       counted: the strip carried one bar of time times its repeat, so the
+       auto-scroll sat on nothing for a few seconds. It is skipped on stage.
+       A note is information, so a region carrying one is still drawn; and
+       nothing is deleted — the region is still in the editor to remove. */
+    if (!barCount(sec) && !sec.note) return;
     host.appendChild(gigSection(sec, barNo));
     barNo += barCount(sec);
   });

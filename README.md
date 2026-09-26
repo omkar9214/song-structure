@@ -137,10 +137,16 @@ cue is on, including the line under each bar. `A−` / `A+` scales the whole cha
 however far away the stand is and remembers where you left it, and the screen is kept
 awake while gig mode is up. `✕` or `Esc` leaves.
 
-Gig mode asks the browser for the whole screen on the way in, so the tab strip and
-address bar are not eating a band of chart, and gives it back on the way out. Where the
-browser refuses — iOS Safari on the phone has no element fullscreen — nothing breaks and
-nothing is said. Installing the app to the home screen loses the browser chrome too.
+Gig mode asks the browser for the whole screen on the way in, so the tab strip and address
+bar are not eating a band of chart, and gives it back on the way out. **It does not ask on
+an iPad or iPhone.** iPadOS grants it and then spends it: a floating close button parks
+itself over the song title, and a swipe anywhere near the top drops straight back out —
+mid-song. Neither is something the page can turn off. iPadOS reports itself as a Mac, so
+the touch count is what tells them apart; no Mac has one.
+
+**On an iPad, Share → Add to Home Screen is the answer**, and a better one than fullscreen
+was: the manifest is `display: standalone`, so the installed app has no browser chrome at
+all, nothing overlaid on the chart, and no gesture that can undo it.
 
 **Auto-scroll** is the ▷ in the gig bar (or `Space`). Musical time underneath comes from
 the clock: each row is worth exactly as long as the music written on it — bars ×
@@ -167,6 +173,12 @@ slider from 30% to 200% — and it stays shut until you ask for it, because it i
 and not something you reach for mid-song. **The speed is remembered on the song**, not on
 the device. Tapping anywhere on the chart pauses and resumes; scrolling by hand takes over
 and resumes from where you put it.
+
+A region with no bars left in it is **not drawn in gig mode**. It used to put its coloured
+name strip on the chart with no music under it — a stripe at the end of the song — and it
+was counted, so the scroll sat on nothing for a bar times the region's repeat. Nothing is
+deleted: the region is still in the editor to remove, and one carrying a note is still
+drawn, because a note is information.
 
 **Whether it is running is readable from across a room**, because forgetting to press play
 is the mistake that actually happens. Stopped, the ▷ breathes. Running, it is a filled
