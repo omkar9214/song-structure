@@ -129,6 +129,19 @@ At phone width the gig bar is already exactly full, so there the pulse wraps ont
 line under it rather than squeezing the song title away. The jump menu hangs off the bar's
 measured height for that reason, not a fixed 56px.
 
+**Tap** beside it plays the tempo in rather than typing a number you guessed. Tap along
+four times or more and the BPM follows you; the pulse re-phases on every tap, so the
+metronome lands on the beat you just played and you can see it settle.
+
+The tempo is the average over the whole run, not the gap between the last two taps, so one
+late tap nudges it instead of throwing it. A tap more than 35% off the running average is
+not treated as a slip but as you deciding on a different tempo, so the count starts again
+from those two taps rather than crawling to the new tempo over eight. Leave it alone for
+2.4s and the run ends — the next tap is a fresh count-in. Measured: taps at exactly 500ms
+give 120, at 667ms give 90, human jitter of ±35ms around 500ms gives 123, and switching
+mid-run from 500ms to 800ms lands on 75. One write to disk when the tapping stops, not one
+per tap. It is not in gig mode.
+
 ### Gig mode
 
 The **Gig** button (or `G`) swaps the editor for a read-only rendering of the same song:

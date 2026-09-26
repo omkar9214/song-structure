@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260926-5">
+<link rel="stylesheet" href="app.css?v=20260926-6">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -61,6 +61,8 @@
       </label>
       <div class="meta pulse" id="song-pulse" hidden
            data-tip="Silent metronome — the song's tempo, always running, so you can count yourself in"><span>Pulse</span><div class="pulse-dots" id="song-pulse-dots" aria-hidden="true"></div></div>
+      <button type="button" class="meta tap-btn" id="song-tap" aria-label="Tap the tempo"
+              data-tip="Tap along with the song — four taps or more and the BPM above follows you"><span>Tap</span><b id="song-tap-read">tempo</b></button>
     </div>
   </section>
 
@@ -395,10 +397,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260926-5"></script>
-<script src="icons.js?v=20260926-5"></script>
-<script src="db.js?v=20260926-5"></script>
-<script src="cloud.js?v=20260926-5"></script>
-<script src="app.js?v=20260926-5"></script>
+<script src="config.js?v=20260926-6"></script>
+<script src="icons.js?v=20260926-6"></script>
+<script src="db.js?v=20260926-6"></script>
+<script src="cloud.js?v=20260926-6"></script>
+<script src="app.js?v=20260926-6"></script>
 </body>
 </html>

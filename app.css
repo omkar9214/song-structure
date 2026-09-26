@@ -119,6 +119,15 @@ button{cursor:pointer;touch-action:manipulation}
    hands are busy. The first dot is the downbeat and is drawn in the accent
    so "one" is findable without counting the row. */
 .pulse{gap:9px;padding-right:9px}
+/* Tap tempo. Reads like the pills beside it because it is the same kind of
+   thing — a fact about the song — except you play it in rather than type it. */
+.tap-btn{cursor:pointer;font-family:inherit;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;
+  gap:8px;padding-right:10px}
+.tap-btn b{font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink);
+  font-variant-numeric:tabular-nums;min-width:44px;text-align:left}
+.tap-btn.counting{border-color:var(--accent);background:var(--accent-soft)}
+.tap-btn.counting b{color:var(--accent)}
+.tap-btn:active{transform:scale(.97)}
 .pulse-dots{display:flex;align-items:center;gap:5px}
 .pdot{width:7px;height:7px;border-radius:99px;background:var(--bar);opacity:.16;flex:none;
   transform:scale(.68);will-change:opacity,transform}
@@ -572,6 +581,7 @@ body.gig-on{overflow:hidden}
 
 /* ── touch: hover-only controls must stay reachable ─────── */
 @media (hover:none),(pointer:coarse){
+  .tap-btn{min-height:40px}                  /* a target you hit in time, not a label */
   /* No hover on touch — and Safari fires :hover on a tap, which used to throw
      the whole tool row over the block the moment you tried to type in it.
      Nothing opens by itself here: the ⋯ opens it, a tap anywhere closes it. */
@@ -676,7 +686,7 @@ body.gig-on{overflow:hidden}
      player, no buttons to add or open anything, no carets on the regions. */
   .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.add-bar,.barline-btn,.barline-add,.add-section-row,
   .drawer,.viewer,.toast,.tip,.gig,.sheet-menu,
-  .track-bar,.r-caret,.micon,.m-icons,.skip-link,.pulse{display:none!important}
+  .track-bar,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
   .r-mid{padding:0 8px}                       /* the caret is gone, so is its gutter */
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}

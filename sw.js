@@ -12,7 +12,7 @@
 
    V must match the ?v= stamp in index.html. If it drifts, nothing breaks —
    the assets are simply cached on first use instead of at install. */
-const V = '20260926-5';
+const V = '20260926-6';
 const CACHE = 'song-structure-' + V;
 
 const SHELL = [

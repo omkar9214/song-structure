@@ -312,6 +312,63 @@ function pulseKeyframes(n) {
     `100%{opacity:${PULSE_DIM};transform:scale(.68)}}`;
 }
 
+/* ─── Tap tempo ──────────────────────────────────────────────────────────
+   Playing the tempo in is faster and more honest than typing a number you
+   guessed, and it is the way you already know it: you count the band in.
+
+   Three things make it usable rather than merely correct.
+
+   · The tempo is the average over the whole run of taps, not the gap between
+     the last two, so one late tap moves it a little instead of throwing it.
+   · A tap far off the running average is not an error to average away, it is
+     you deciding the tempo is different — so the count starts again from
+     those two taps rather than crawling towards the new tempo over eight.
+   · Leave it alone and the run ends. The next tap is a fresh count-in, not a
+     continuation of one from two songs ago.
+
+   The pulse beside it re-phases on every tap, because the BPM changes and the
+   dots are rebuilt from it — so the metronome lands on the beat you just
+   played, which is exactly what you want to see while checking it. */
+const TAP_GAP = 2400;          /* silence longer than this ends the run */
+let taps = [], tapIdle = null, tapSave = null;
+
+function tapTempo() {
+  const now = performance.now();
+  const prev = taps[taps.length - 1];
+  if (prev != null && now - prev > TAP_GAP) taps = [];
+  else if (taps.length >= 3) {
+    /* a tap well away from the running average means a new tempo, not a slip */
+    const avg = (prev - taps[0]) / (taps.length - 1);
+    if (Math.abs((now - prev) - avg) > avg * 0.35) taps = [prev];
+  }
+  taps.push(now);
+  if (taps.length > 9) taps = taps.slice(-9);          /* eight intervals is plenty */
+
+  if (taps.length >= 2) {
+    const per = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+    const bpm = Math.round(60000 / per);
+    if (bpm >= 20 && bpm <= 300) {
+      song().bpm = String(bpm);
+      $('#song-bpm').value = bpm;
+      pulsePaint();
+      clearTimeout(tapSave);
+      tapSave = setTimeout(() => save(), 700);         /* one write when the tapping stops */
+    }
+  }
+  paintTap();
+  clearTimeout(tapIdle);
+  tapIdle = setTimeout(() => { taps = []; paintTap(); }, TAP_GAP);
+}
+
+function paintTap() {
+  const btn = $('#song-tap'), read = $('#song-tap-read');
+  if (!btn || !read) return;
+  btn.classList.toggle('counting', taps.length > 0);
+  read.textContent = !taps.length ? 'tempo'
+    : taps.length === 1 ? 'keep going'
+    : `${song().bpm} bpm`;
+}
+
 let pulseKfN = 0;
 function pulsePaint() {
   const raw = parseFloat(song().bpm);
@@ -410,6 +467,7 @@ function paint() {
   $('#song-bpm').value    = s.bpm || '';
   $('#song-time').value   = s.time;
   pulsePaint();
+  taps = []; paintTap();
   document.title = s.title ? `${s.title} — Song Structure` : 'Song Structure';
 
   renderTrack();
@@ -2966,7 +3024,8 @@ document.querySelectorAll('.meta').forEach(l => {
   const box = l.querySelector('[contenteditable]');
   if (box) l.addEventListener('click', e => { if (e.target !== box) focusBox(box); });
 });
-$('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); pulsePaint(); };
+$('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); pulsePaint(); taps = []; paintTap(); };
+$('#song-tap').onclick    = tapTempo;
 $('#song-time').onchange  = e => { song().time = e.target.value; save(); pulsePaint(); };
 
 $('#btn-add-section').onclick = sectionDialog;
