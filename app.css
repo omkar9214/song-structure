@@ -114,6 +114,28 @@ button{cursor:pointer;touch-action:manipulation}
 .stat{font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px dashed var(--line-strong);
   border-radius:99px;padding:4px 12px}
 
+/* Visual metronome. Silent on purpose — it is a count-in cue, not a click
+   track, so it has to be readable out of the corner of an eye while both
+   hands are busy. The first dot is the downbeat and is drawn in the accent
+   so "one" is findable without counting the row. */
+.pulse{gap:9px;padding-right:9px}
+.pulse-dots{display:flex;align-items:center;gap:5px}
+.pdot{width:7px;height:7px;border-radius:99px;background:var(--bar);opacity:.16;flex:none;
+  transform:scale(.68);will-change:opacity,transform}
+.pdot.one{width:9px;height:9px;background:var(--accent)}
+.gig-pulse{flex:none;gap:7px;padding:0 6px}
+.gig-pulse .pdot{width:10px;height:10px}
+.gig-pulse .pdot.one{width:12px;height:12px}
+/* Measured: at 375px the gig bar is already exactly full — the seven buttons
+   and the setlist position leave nothing over, and the song title is the
+   thing that gives. So on a phone the pulse wraps to its own line under the
+   bar instead of taking width the title does not have. Centred, because on
+   its own line there is nothing to align it to. */
+@media(max-width:720px){
+  .gig-bar{flex-wrap:wrap}
+  .gig-pulse{order:9;width:100%;justify-content:center;gap:9px;padding:3px 0 0}
+}
+
 .roadmap-wrap{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--r);padding:11px 14px;margin-bottom:28px;box-shadow:var(--shadow)}
 .roadmap-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
@@ -448,7 +470,7 @@ body.gig-on{overflow:hidden}
 .gig-pos:hover{border-color:var(--line-strong);color:var(--ink-2)}
 .gp-name{margin-right:6px}
 .gp-n{font-weight:700;color:var(--ink-2)}
-.gig-jump{position:absolute;top:calc(56px + env(safe-area-inset-top));right:10px;z-index:3;width:260px;max-width:88vw;
+.gig-jump{position:absolute;top:var(--gig-bar-h,calc(56px + env(safe-area-inset-top)));right:10px;z-index:3;width:260px;max-width:88vw;
   max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line-strong);border-radius:12px;
   box-shadow:var(--shadow-lift);padding:6px}
 .gj-row{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;color:var(--ink);
@@ -627,7 +649,7 @@ body.gig-on{overflow:hidden}
      player, no buttons to add or open anything, no carets on the regions. */
   .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.add-bar,.barline-btn,.barline-add,.add-section-row,
   .drawer,.viewer,.toast,.tip,.gig,.sheet-menu,
-  .track-bar,.r-caret,.micon,.m-icons,.skip-link{display:none!important}
+  .track-bar,.r-caret,.micon,.m-icons,.skip-link,.pulse{display:none!important}
   .r-mid{padding:0 8px}                       /* the caret is gone, so is its gutter */
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}

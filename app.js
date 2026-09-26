@@ -278,6 +278,77 @@ function onPulled() {
 const song = () => state.songs.find(s => s.id === state.currentId) || state.songs[0];
 const beatsPerBar = () => parseInt(song().time.split('/')[0], 10) || 4;
 
+/* ── Visual metronome ────────────────────────────────────────────────────
+   A silent pulse showing the song's own tempo, running the whole time the
+   chart is open, so the count-in is in the right tempo before a note is
+   played. It sits with Key/BPM/Time on the chart and in the gig bar.
+
+   It is driven entirely by CSS animation, not by requestAnimationFrame, for
+   two reasons that both matter on stage: a permanent rAF loop is battery the
+   iPad spends for the length of the gig, and a main thread busy re-laying out
+   a chart makes a JS-timed pulse stutter — a metronome that hesitates is
+   worse than none. The compositor owns this one, so it neither drifts nor
+   costs anything to leave running.
+
+   Each dot animates over one whole bar and is held back by a negative delay,
+   so dot k lights k beats after the downbeat. The keyframes have to be built
+   per time signature, because "how much of a bar is one beat" is exactly what
+   the time signature says and keyframe stops cannot be a CSS variable.
+
+   No tempo written on the chart means there is nothing to count in to, so the
+   pulse hides rather than inventing one. (autoBpm() falls back to 100 for the
+   scroll, which is a guess worth making when the alternative is not moving;
+   a metronome guessing at the tempo is just wrong.) */
+const PULSE_DIM = 0.16;
+
+function pulseKeyframes(n) {
+  const beat = 100 / n;                       /* one beat, as a % of the bar */
+  const hold = (beat * 0.40).toFixed(3);
+  const gone = (beat * 0.92).toFixed(3);
+  return `@keyframes pulse-beat{` +
+    `0%{opacity:1;transform:scale(1)}` +
+    `${hold}%{opacity:1;transform:scale(1)}` +
+    `${gone}%{opacity:${PULSE_DIM};transform:scale(.68)}` +
+    `100%{opacity:${PULSE_DIM};transform:scale(.68)}}`;
+}
+
+let pulseKfN = 0;
+function pulsePaint() {
+  const raw = parseFloat(song().bpm);
+  const bpm = raw > 0 ? Math.max(20, Math.min(300, raw)) : 0;
+  const n   = beatsPerBar();
+  const key = bpm + '/' + n;
+
+  const pill = $('#song-pulse'), gig = $('#gig-pulse');
+  if (pill) pill.hidden = !bpm;
+  if (gig)  gig.hidden  = !bpm;
+  if (!bpm) return;
+
+  if (n !== pulseKfN) {
+    let sheet = $('#pulse-kf');
+    if (!sheet) { sheet = el('style'); sheet.id = 'pulse-kf'; document.head.appendChild(sheet); }
+    sheet.textContent = pulseKeyframes(n);
+    pulseKfN = n;
+  }
+
+  const beatSec = 60 / bpm, barSec = beatSec * n;
+  for (const host of [$('#song-pulse-dots'), gig]) {
+    /* Repainting in place would restart the animation on every keystroke and
+       the pulse would never settle, so a host already showing this tempo is
+       left alone. The key also covers a host that has just been unhidden with
+       no dots in it yet. */
+    if (!host || host.dataset.pulse === key) continue;
+    host.innerHTML = '';
+    for (let k = 0; k < n; k++) {
+      const d = el('i', 'pdot' + (k ? '' : ' one'));
+      /* dot k is one beat behind dot k-1; k = 0 lands on the downbeat */
+      d.style.animation = `pulse-beat ${barSec}s linear ${-((n - k) % n) * beatSec}s infinite`;
+      host.appendChild(d);
+    }
+    host.dataset.pulse = key;
+  }
+}
+
 /* A block occupies `span` bars of time and shows `beats.length` chord fields.
    One field by default — the chord written big across the whole bar. */
 function newBar() { return { id: uid('b'), span: 1, beats: [''], lyric: '', media: [] }; }
@@ -338,6 +409,7 @@ function paint() {
   setText('#song-key', s.key);
   $('#song-bpm').value    = s.bpm || '';
   $('#song-time').value   = s.time;
+  pulsePaint();
   document.title = s.title ? `${s.title} — Song Structure` : 'Song Structure';
 
   renderTrack();
@@ -2248,6 +2320,7 @@ function renderGig() {
   if (s.bpm) bits.push(s.bpm + ' bpm');
   if (s.time && s.time !== '4/4') bits.push(s.time);
   $('#gig-meta').textContent = bits.join('  ·  ');
+  pulsePaint();
 
   const l = listById(state.currentListId);
   const songs = l ? listSongs(l) : [];
@@ -2772,8 +2845,8 @@ document.querySelectorAll('.meta').forEach(l => {
   const box = l.querySelector('[contenteditable]');
   if (box) l.addEventListener('click', e => { if (e.target !== box) focusBox(box); });
 });
-$('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); };
-$('#song-time').onchange  = e => { song().time = e.target.value; save(); };
+$('#song-bpm').oninput    = e => { song().bpm = e.target.value; save(); pulsePaint(); };
+$('#song-time').onchange  = e => { song().time = e.target.value; save(); pulsePaint(); };
 
 $('#btn-add-section').onclick = sectionDialog;
 $('#btn-songs').onclick    = openDrawer;
@@ -2949,6 +3022,17 @@ document.addEventListener('keydown', e => {
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); sectionDialog(); }
   if (e.key === 'g' || e.key === 'G') { e.preventDefault(); gigOn(); }
 });
+
+/* The jump menu hangs off the bottom of the gig bar, and the bar is not a
+   fixed height any more: on a phone the pulse wraps onto a second line, and
+   it disappears entirely on a song with no tempo. Measure it rather than
+   guessing, or the menu opens underneath the bar it belongs to. */
+if (window.ResizeObserver) {
+  const bar = $('.gig-bar'), gig = $('#gig');
+  if (bar && gig) new ResizeObserver(([e]) => {
+    gig.style.setProperty('--gig-bar-h', e.target.getBoundingClientRect().height + 'px');
+  }).observe(bar);
+}
 
 /* the mapping from musical time to pixels is a function of the layout */
 window.addEventListener('resize', () => {

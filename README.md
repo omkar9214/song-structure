@@ -110,6 +110,25 @@ song. The layout you see is the layout you get.
 **Restore**, which write and read a JSON file with the media embedded — that is the way to
 move a song to another machine, since a PDF cannot be edited back.
 
+### The pulse
+
+A silent metronome sits with Key / BPM / Time on the chart, and in the gig bar. It is always
+running — there is nothing to start — so the tempo is there to catch before the count-in.
+One dot per beat in the bar, the downbeat drawn in the accent colour so "one" is findable
+without counting the row. A song with no BPM written on it has no pulse: the auto-scroll
+falls back to 100 when there is no tempo, because a chart that does not move is useless,
+but a metronome guessing at the tempo is simply wrong.
+
+It is driven by CSS animation rather than `requestAnimationFrame`. A permanent rAF loop is
+battery spent for the length of a gig, and a main thread busy re-laying out a chart makes a
+JS-timed pulse stutter — a metronome that hesitates is worse than none. The keyframes are
+rebuilt per time signature, because "how much of a bar is one beat" is exactly what the time
+signature says and keyframe stops cannot be a CSS variable.
+
+At phone width the gig bar is already exactly full, so there the pulse wraps onto its own
+line under it rather than squeezing the song title away. The jump menu hangs off the bar's
+measured height for that reason, not a fixed 56px.
+
 ### Gig mode
 
 The **Gig** button (or `G`) swaps the editor for a read-only rendering of the same song:
