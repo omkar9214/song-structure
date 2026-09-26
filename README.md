@@ -137,22 +137,50 @@ cue is on, including the line under each bar. `A−` / `A+` scales the whole cha
 however far away the stand is and remembers where you left it, and the screen is kept
 awake while gig mode is up. `✕` or `Esc` leaves.
 
-**Auto-scroll** is the ▷ in the gig bar (or `Space`). The chart is paced by the music,
-not by pixels: each row stays on screen for exactly as long as the music written on it —
-bars × beats-per-bar × the region's repeat, at the song's BPM — so a `×4` chorus drawn
-once holds for all four passes and nothing drifts out of time over a five-minute song.
-The bar being played sits about a third of the way down rather than at the top, because
-you read ahead of what you are playing; that is also why the first screenful holds still
-while the music catches up to that line, with no special case for it. Time comes from the
-clock, not from counting frames, so a throttled repaint is a moment it catches up on
-rather than a second it loses.
+Gig mode asks the browser for the whole screen on the way in, so the tab strip and
+address bar are not eating a band of chart, and gives it back on the way out. Where the
+browser refuses — iOS Safari on the phone has no element fullscreen — nothing breaks and
+nothing is said. Installing the app to the home screen loses the browser chrome too.
 
-The strip under the bar has pause, back-to-the-top, and a slow/fast slider from 0.5× to
-2× showing the effective tempo. **The speed is remembered on the song**, not on the
-device — the pace you read a chart at is a fact about that chart. Tapping anywhere on the
-chart pauses and resumes; scrolling by hand takes over and resumes from where you put it.
+**Auto-scroll** is the ▷ in the gig bar (or `Space`). Musical time underneath comes from
+the clock: each row is worth exactly as long as the music written on it — bars ×
+beats-per-bar × the region's repeat, at the song's BPM — so a `×4` chorus drawn once
+holds for all four passes and nothing drifts out of time over a five-minute song, and a
+throttled repaint is a moment it catches up on rather than a second it loses.
+
+**The chart turns pages rather than creeping.** The first version pinned the played bar at
+a third of the way down and scrolled continuously to keep it there, which is right for a
+playhead and wrong for reading — the page is never still, so the eye never settles, and
+the slider was being run at its slowest setting to fight it. Now the chart holds
+completely still while the played bar is anywhere comfortable, and only when that bar
+falls past **76% of the visible height** does it scroll — once, eased, over about half a
+second — to put the bar back at **26%**. Then it holds again. Both numbers are fractions
+of the visible height, so it answers to the type size and the screen on its own: bigger
+type means fewer bars on screen means more frequent turns, and there is nothing to set.
+
+Measured at 834×1112, 44 bars: still at the top for 12.4s while the played bar travelled
+70 → 820px, one 0.6s turn to 526px, still again for 7s, then the last turn. Hold, turn,
+hold.
+
+The **⚙ slider** button opens the speed strip — pause, back-to-the-top, and a slow/fast
+slider from 30% to 200% — and it stays shut until you ask for it, because it is a setting
+and not something you reach for mid-song. **The speed is remembered on the song**, not on
+the device. Tapping anywhere on the chart pauses and resumes; scrolling by hand takes over
+and resumes from where you put it.
+
+**Whether it is running is readable from across a room**, because forgetting to press play
+is the mistake that actually happens. Stopped, the ▷ breathes. Running, it is a filled
+block and a line under the bar visibly travels through the song. Paused, the line is there
+but grey and still.
 
 ### Setlists
+
+Scrolling inside the drawer stays inside the drawer. On iPad a drag on the dark area beside
+it used to scroll the chart underneath — measured, 834×1112: the document went 0 → 500 —
+and once the page had taken the gesture the list stopped responding until you lifted your
+finger. The page is not frozen to fix it (`overflow:hidden` on the body is what cost us the
+scroll position on WebKit before); instead nothing in the drawer but the list may pan, the
+list keeps its overflow to itself, and a wheel outside the list is swallowed.
 
 A setlist is one gig: a named, ordered list of songs, in the second tab of the drawer.
 **Start** opens the first song in gig mode and `‹` `›` walk the running order; the setlist

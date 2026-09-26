@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260926-2">
+<link rel="stylesheet" href="app.css?v=20260926-4">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -360,6 +360,7 @@
     <div class="gig-pulse pulse-dots" id="gig-pulse" hidden aria-hidden="true"></div>
     <button class="gig-pos" id="gig-pos" aria-haspopup="true" aria-expanded="false" hidden></button>
     <button class="gig-btn" id="gig-auto" aria-label="Auto-scroll the chart in time with the song"></button>
+    <button class="gig-btn" id="gig-speed-btn" data-icon="sliders" aria-label="Scroll speed" aria-expanded="false"></button>
     <button class="gig-btn" id="gig-smaller" aria-label="Smaller type">A<span class="gig-sub">−</span></button>
     <button class="gig-btn" id="gig-bigger" aria-label="Bigger type">A<span class="gig-sub">+</span></button>
     <button class="gig-btn" id="gig-next" data-icon="caretRight" aria-label="Next song in the setlist"></button>
@@ -372,12 +373,13 @@
     <button class="gig-btn sm" id="gig-restart" data-icon="repeat" aria-label="Back to the top of the chart"></button>
     <span class="ga-read" id="gig-speed-txt"></span>
     <label class="ga-slider"><span class="sr-only">Scroll speed</span>
-      <input type="range" id="gig-speed" min="0.5" max="2" step="0.05" value="1"></label>
+      <input type="range" id="gig-speed" min="0.3" max="2" step="0.05" value="1"></label>
     <span class="ga-hint">tap the chart to pause</span>
+    <button class="gig-btn sm" id="gig-speed-hide" data-icon="x" aria-label="Hide the speed control"></button>
   </div>
   <div class="gig-jump" id="gig-jump" hidden></div>
+  <div class="gig-prog" id="gig-prog" aria-hidden="true"><i id="gig-prog-fill"></i></div>
   <div class="gig-body" id="gig-body"></div>
-  <div class="gig-foot" id="gig-foot" hidden></div>
 </div>
 
 <!-- ── Action sheet (touch) ─────────────────────────────────── -->
@@ -393,10 +395,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260926-2"></script>
-<script src="icons.js?v=20260926-2"></script>
-<script src="db.js?v=20260926-2"></script>
-<script src="cloud.js?v=20260926-2"></script>
-<script src="app.js?v=20260926-2"></script>
+<script src="config.js?v=20260926-4"></script>
+<script src="icons.js?v=20260926-4"></script>
+<script src="db.js?v=20260926-4"></script>
+<script src="cloud.js?v=20260926-4"></script>
+<script src="app.js?v=20260926-4"></script>
 </body>
 </html>

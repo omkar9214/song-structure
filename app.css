@@ -132,8 +132,12 @@ button{cursor:pointer;touch-action:manipulation}
    bar instead of taking width the title does not have. Centred, because on
    its own line there is nothing to align it to. */
 @media(max-width:720px){
-  .gig-bar{flex-wrap:wrap}
-  .gig-pulse{order:9;width:100%;justify-content:center;gap:9px;padding:3px 0 0}
+  .gig-bar{flex-wrap:wrap;justify-content:center}
+  .gig-pulse{order:9;gap:9px;padding:3px 6px 0}
+  /* the speed control is a setting, not a control you reach for mid-song, so
+     on a phone it goes down to the second line and gives the song title back
+     the 44px it was taking out of it */
+  #gig-speed-btn{order:9;margin-top:3px}
 }
 
 .roadmap-wrap{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);
@@ -328,13 +332,24 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
 .sw.on{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--panel)}
 
 /* ── drawer / viewer / toast ────────────────────────────── */
+/* The drawer covers the chart but the document under it is still a scroll
+   box, and on iPad that showed: a drag on the dark area scrolled the page
+   underneath, and once the page had taken the gesture the list itself stopped
+   responding until you lifted your finger. Measured, drawer open, 834×1112:
+   the document went 0 → 500.
+
+   The page cannot simply be frozen with overflow:hidden — that is what cost
+   us the scroll position on WebKit before. So the scroll is stopped at the
+   source instead: nothing in the drawer but the list may pan, and the list
+   keeps its scrolling to itself rather than handing the overflow on. */
 .drawer{position:fixed;inset:0;z-index:60}
-.drawer-scrim{position:absolute;inset:0;background:rgba(10,10,14,.45)}
+.drawer-scrim{position:absolute;inset:0;background:rgba(10,10,14,.45);touch-action:none}
+.drawer-head,.tabs,.drawer-foot{touch-action:none}
 .drawer-panel{position:absolute;top:0;left:0;bottom:0;width:340px;max-width:86vw;background:var(--panel);
   border-right:1px solid var(--line);z-index:1;display:flex;flex-direction:column;box-shadow:var(--shadow-lift)}
 .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:15px 16px;border-bottom:1px solid var(--line)}
 .drawer-head h2{margin:0;font-size:15px}
-.song-list{overflow:auto;padding:8px}
+.song-list{overflow:auto;padding:8px;overscroll-behavior:contain;touch-action:pan-y}
 .song-row{display:flex;align-items:center;gap:8px;padding:10px 11px;border-radius:9px;cursor:pointer;
   transition:background var(--t)}
 .song-row:hover{background:var(--sunk)}
@@ -495,10 +510,22 @@ body.gig-on{overflow:hidden}
 .ga-slider{flex:1;min-width:90px;display:flex;align-items:center}
 .ga-slider input{width:100%;accent-color:var(--accent);height:26px}
 .ga-hint{font-size:11px;color:var(--muted);white-space:nowrap;flex:none}
-.gig-body{flex:1;overflow:auto;padding:14px 14px 40px;-webkit-overflow-scrolling:touch}
+.gig-body{flex:1;overflow:auto;padding:14px 14px 40px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .gig-empty{color:var(--muted);text-align:center;padding:40px}
-.gig-foot{padding:7px 14px calc(7px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
-  background:var(--panel);color:var(--muted);font-size:12.5px;font-weight:600}
+/* Whether the chart is scrolling itself has to be answerable from across a
+   room, without reading a button: forgetting to press play is the failure
+   that actually happens. Running is a filled button and a line that visibly
+   travels; armed-but-stopped is a button that breathes, so an untouched gig
+   mode asks to be started rather than sitting there looking finished. */
+.gig-prog{height:3px;background:var(--line);flex:none;overflow:hidden}
+.gig-prog[hidden]{display:none!important}
+.gig-prog i{display:block;height:100%;width:0;background:var(--accent);
+  transition:width .12s linear}
+.gig-prog.paused i{background:var(--bar)}
+.gig-btn.running{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.gig-btn.running:hover{background:var(--accent);color:var(--accent-ink);filter:brightness(1.08)}
+.gig-btn.armed{border-color:var(--accent);color:var(--accent);animation:gig-armed 2.1s ease-in-out infinite}
+@keyframes gig-armed{0%,100%{opacity:1}50%{opacity:.45}}
 
 .g-sect{margin-bottom:calc(16px * var(--gs))}
 .g-cues{display:grid;gap:5px;margin-bottom:5px;align-items:end}

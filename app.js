@@ -2046,6 +2046,14 @@ let drawerTab = 'songs';
 const openDrawer  = () => { showTab(drawerTab); $('#drawer').hidden = false; };
 const closeDrawer = () => { $('#drawer').hidden = true; };
 
+/* touch-action stops a finger scrolling the page from behind the drawer, but
+   it says nothing about a wheel or a trackpad, which reach the document
+   whatever the element under the pointer allows. Anything outside the two
+   lists is swallowed here. */
+$('#drawer').addEventListener('wheel', e => {
+  if (!e.target.closest('#song-list,#list-pane')) e.preventDefault();
+}, { passive: false });
+
 /* ─── setlists ──────────────────────────────────────────────────
    A setlist is a named, ordered list of song ids — a gig. It holds ids, not
    copies, so editing a song edits it everywhere, and deleting a song only
@@ -2249,12 +2257,33 @@ function gigOn() {
   renderGig();
   keepAwake();
   $('#gig-body').scrollTop = 0;
+  toggleSpeedBar(false);
   paintAuto();
+  goFullscreen();
   $('#gig-close').focus({ preventScroll: true });
+}
+
+/* The browser's own tab strip and address bar are a band of chart you do not
+   get to read. Gig mode asks for the screen; where the ask is refused — iOS
+   Safari on the phone has no element fullscreen at all — nothing breaks and
+   nothing is said, because there is no action the player could take mid-gig
+   anyway. Installing the app to the home screen is the other way to lose the
+   browser chrome, and that is in the README, not in a toast. */
+function goFullscreen() {
+  const el = document.documentElement;
+  const go = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!go || document.fullscreenElement || document.webkitFullscreenElement) return;
+  try { const r = go.call(el); if (r && r.catch) r.catch(() => {}); } catch (_) {}
+}
+function dropFullscreen() {
+  const out = document.exitFullscreen || document.webkitExitFullscreen;
+  if (!out || !(document.fullscreenElement || document.webkitFullscreenElement)) return;
+  try { const r = out.call(document); if (r && r.catch) r.catch(() => {}); } catch (_) {}
 }
 function gigOff() {
   closeJump();
   autoStop();
+  dropFullscreen();
   $('#gig').hidden = true;
   document.body.classList.remove('gig-on');
   releaseWake();
@@ -2338,11 +2367,6 @@ function renderGig() {
   }
   $('#gig-pos').hidden = !inList;
   if (!inList) closeJump();
-
-  const foot = $('#gig-foot');
-  const nxt = inList ? songs[i + 1] : null;
-  foot.textContent = nxt ? 'Next: ' + (nxt.title || 'Untitled') : '';
-  foot.hidden = !nxt;
 
   const host = $('#gig-body');
   host.innerHTML = '';
@@ -2457,15 +2481,37 @@ function gigSection(sec, startBar) {
 
    The speed multiplier is remembered on the song, because the tempo you read
    a chart at is a fact about that chart, not about the device. */
-const ANCHOR = 0.34;                       /* where the played bar sits, top-down */
+/* How the chart travels.
+
+   The first version pinned the played bar at a fixed 0.34 of the viewport and
+   crept the chart continuously to keep it there. That is right for a playhead
+   and wrong for reading: the page is never still, so the eye never settles,
+   and Omkar was running it at the slowest setting the slider had — the model
+   was being fought, not tuned.
+
+   So the chart now turns pages. It holds still while the played bar is
+   anywhere in the comfortable band, and only when the bar falls past TRIGGER
+   of the visible height does it scroll — once, smoothly — to put that bar
+   back at LEAD. Then it holds again. Everything is a fraction of the visible
+   height, so it answers to the type size and the screen on its own: bigger
+   type means fewer bars on screen means more frequent turns, which is the
+   correct response and needs no separate setting.
+
+   Musical time underneath is unchanged and still comes from the clock. The
+   speed slider still stretches that timeline, so it now reads as "how soon
+   the page turns" rather than "how fast the chart crawls". */
+const LEAD    = 0.26;   /* where the played bar lands after a turn */
+const TRIGGER = 0.76;   /* how far down it may fall before the page turns */
+const ANCHOR  = LEAD;   /* hand-takeover reads the position back from here */
 /* Time comes from the clock, not from counting frames. If the browser throttles
    its animation callbacks — a dimmed screen, a backgrounded app, a slow
    repaint — a frame-counting scroll silently falls behind the band. Reading
    the clock each frame means a dropped second is a second the chart catches
    up on, which is the only correct answer when the music did not wait. */
-const Auto = { on: false, paused: true, raf: 0, t: 0, base: 0, at: 0, plan: null, total: 0, applying: false };
+const Auto = { on: false, paused: true, raf: 0, t: 0, base: 0, at: 0, plan: null, total: 0, applying: false, turn: null };
 
-const speedOf = so => Math.min(2, Math.max(0.5, parseFloat((so || song()).gigSpeed) || 1));
+const SPEED_MIN = 0.3, SPEED_MAX = 2;
+const speedOf = so => Math.min(SPEED_MAX, Math.max(SPEED_MIN, parseFloat((so || song()).gigSpeed) || 1));
 /* No tempo written on the chart means "I never set one", not "twenty". The
    clamp used to run first, so an unset bpm came out of Math.max as 20 and the
    chart crawled. Decide whether there is a tempo, then clamp. */
@@ -2519,8 +2565,8 @@ function autoStart() {
   if (!gigIsOn()) return;
   Auto.on = true; Auto.paused = false;
   autoResync();
+  Auto.turn = null;
   autoBuild();
-  $('#gig-scroll').hidden = false;
   paintAuto();
   cancelAnimationFrame(Auto.raf);
   Auto.raf = requestAnimationFrame(autoTick);
@@ -2533,10 +2579,8 @@ function autoStart() {
    the stop — a deliberate press — rather than jumping under you on the play. */
 function autoStop() {
   Auto.on = false; Auto.paused = true;
-  Auto.t = 0; autoResync();
+  Auto.t = 0; Auto.turn = null; autoResync();
   cancelAnimationFrame(Auto.raf); Auto.raf = 0;
-  const bar = $('#gig-scroll');
-  if (bar) bar.hidden = true;
   const body = $('#gig-body');
   if (body) body.scrollTop = 0;
   paintAuto();
@@ -2544,39 +2588,81 @@ function autoStop() {
 function autoPause(on) {
   if (!Auto.on) return;
   Auto.paused = on == null ? !Auto.paused : !!on;
+  Auto.turn = null;
   if (!Auto.paused) autoResync();
   paintAuto();
 }
 function autoRestart() {
-  Auto.t = 0; autoResync();
+  Auto.t = 0; Auto.turn = null; autoResync();
   autoBuild();
   const body = $('#gig-body');
   body.scrollTop = 0;
   paintAuto();
 }
+/* A turn long enough to follow with the eye and short enough not to be a
+   second thing happening while you play. Long jumps get more time, but not in
+   proportion, or a big one would feel like a stall. */
+const turnMs = (dist, h) => Math.max(380, Math.min(1400, 780 * Math.sqrt(dist / Math.max(1, h))));
+
 function autoTick(now) {
   if (!Auto.on) return;
   const body = $('#gig-body');
   if (!Auto.paused && Auto.plan) {
     Auto.t = Auto.base + (now - Auto.at) / 1000 * speedOf();
-    const max = Math.max(0, body.scrollHeight - body.clientHeight);
-    const want = Math.max(0, Math.min(max, autoY(Auto.t) - body.clientHeight * ANCHOR));
+    const h   = body.clientHeight;
+    const max = Math.max(0, body.scrollHeight - h);
+    const y   = autoY(Auto.t);                       /* the played bar, in chart coordinates */
+    let want  = body.scrollTop;
+
+    if (Auto.turn) {
+      const k = Math.min(1, (now - Auto.turn.t0) / Auto.turn.ms);
+      const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;   /* ease in and out */
+      want = Auto.turn.from + (Auto.turn.to - Auto.turn.from) * e;
+      if (k >= 1) Auto.turn = null;
+    } else if (y - body.scrollTop > h * TRIGGER && body.scrollTop < max) {
+      const from = body.scrollTop;
+      /* never backwards: near the end of a song the clamp can put the target
+         above where the chart already sits */
+      const to   = Math.max(from, Math.min(max, y - h * LEAD));
+      if (to > from) Auto.turn = { t0: now, ms: turnMs(to - from, h), from, to };
+    }
+
+    want = Math.max(0, Math.min(max, want));
     Auto.applying = true;
     body.scrollTop = want;
     Auto.applying = false;
-    if (Auto.t >= Auto.total) { Auto.t = Auto.total; Auto.paused = true; paintAuto(); }
+    if (Auto.t >= Auto.total) { Auto.t = Auto.total; Auto.paused = true; Auto.turn = null; paintAuto(); }
+    paintProgress();
   }
   Auto.raf = requestAnimationFrame(autoTick);
+}
+
+/* The one thing that has to be readable without looking at a control: is it
+   running? A line that visibly travels answers it, and answers where you are
+   in the song at the same time. */
+function paintProgress() {
+  const bar = $('#gig-prog'), fill = $('#gig-prog-fill');
+  if (!bar || !fill) return;
+  bar.hidden = !Auto.on;
+  bar.classList.toggle('paused', Auto.paused);
+  fill.style.width = (Auto.on && Auto.total > 0 ? Math.min(100, Auto.t / Auto.total * 100) : 0) + '%';
 }
 
 function paintAuto() {
   const btn = $('#gig-auto');
   if (btn) {
+    const running = Auto.on && !Auto.paused;
     btn.innerHTML = '';
     btn.appendChild(icon(Auto.on ? 'square' : 'play', 15));
     btn.setAttribute('aria-label', Auto.on ? 'Stop auto-scroll' : 'Auto-scroll the chart in time with the song');
-    btn.classList.toggle('on', Auto.on);
+    btn.classList.toggle('on', Auto.on && Auto.paused);
+    btn.classList.toggle('running', running);
+    /* stopped, in gig mode, with a chart to scroll: the button breathes until
+       it is pressed. Forgetting to start it is the mistake that keeps
+       happening, and a still button does nothing to prevent it. */
+    btn.classList.toggle('armed', !Auto.on && gigIsOn());
   }
+  paintProgress();
   const pb = $('#gig-pause');
   if (pb) {
     pb.innerHTML = '';
@@ -2587,16 +2673,29 @@ function paintAuto() {
   if (sl && document.activeElement !== sl) sl.value = String(speedOf());
   const txt = $('#gig-speed-txt');
   if (txt) {
-    const sp = speedOf();
     const set = parseFloat(song().bpm) > 0;
-    txt.textContent = `${sp.toFixed(2)}×  ·  ${Math.round(autoBpm() * sp)} bpm${set ? '' : ' (no bpm set)'}`
-      + (Auto.paused ? '  ·  paused' : '');
+    txt.textContent = `Speed ${Math.round(speedOf() * 100)}%`
+      + (set ? '' : '  ·  no bpm set')
+      + (Auto.on && Auto.paused ? '  ·  paused' : '');
   }
+}
+
+/* The speed strip is a setting, not a control you need during a song, and it
+   was taking a band of the chart for the whole gig. It stays shut until it is
+   asked for. */
+function toggleSpeedBar(on) {
+  const bar = $('#gig-scroll');
+  const want = on == null ? bar.hidden : !!on;
+  bar.hidden = !want;
+  $('#gig-speed-btn').setAttribute('aria-expanded', String(want));
+  $('#gig-speed-btn').classList.toggle('on', want);
+  if (want) paintAuto();
+  if (gigIsOn() && Auto.on) autoBuild();       /* the strip changed the height */
 }
 let speedT = null;
 function autoSpeed(v) {
   autoResync();                                  /* the new speed starts now, not retroactively */
-  song().gigSpeed = Math.min(2, Math.max(0.5, Math.round(v * 100) / 100));
+  song().gigSpeed = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round(v * 100) / 100));
   paintAuto();
   clearTimeout(speedT);
   speedT = setTimeout(() => save(), 600);        /* one write when the finger stops */
@@ -2607,6 +2706,7 @@ function autoSpeed(v) {
 let handT = null;
 function autoHandOff() {
   if (!Auto.on || Auto.applying) return;
+  Auto.turn = null;
   if (!Auto.paused) autoPause(true);
   clearTimeout(handT);
   handT = setTimeout(() => { Auto.t = autoTimeFor($('#gig-body').scrollTop); autoResync(); }, 260);
@@ -2883,6 +2983,8 @@ $('#gig-auto').onclick     = () => Auto.on ? autoStop() : autoStart();
 $('#gig-pause').onclick    = () => autoPause();
 $('#gig-restart').onclick  = autoRestart;
 $('#gig-speed').oninput    = e => autoSpeed(parseFloat(e.target.value));
+$('#gig-speed-btn').onclick  = () => toggleSpeedBar();
+$('#gig-speed-hide').onclick = () => toggleSpeedBar(false);
 /* a finger or a wheel takes priority over the clock */
 $('#gig-body').addEventListener('wheel', autoHandOff, { passive: true });
 $('#gig-body').addEventListener('touchmove', autoHandOff, { passive: true });
