@@ -374,6 +374,35 @@ from the **block** it belongs to, which already knows its own bar number, rather
 the region menu where you had to name that number by hand. The slot under a chord now
 carries lyrics, so the cue lane above is where the rest of the marks go.
 
+### A resources folder on the device
+
+In the account dialog. Pick a folder and every file you attach is written into it as a real
+file you can open in Finder — named `<song> — <file>`, with anything a filesystem refuses
+stripped out. Change the folder later and you are asked whether to bring the files across;
+**declining is a real answer**, and leaves you with two folders holding different material.
+
+It is a **mirror, never the store of record.** IndexedDB stays that, because IndexedDB is
+what makes the iPad open a chart with no signal, and no part of the stage path moves onto an
+API the stage device does not have.
+
+And it does not have it. `showDirectoryPicker` exists in Chrome and Edge on a desktop and in
+**no browser on iPadOS** — every browser there is WebKit, so installing another one changes
+nothing. Checked against MDN's compat data, not remembered:
+
+| API | Chrome / Edge desktop | Safari macOS | Safari iOS & iPadOS |
+|---|---|---|---|
+| `showDirectoryPicker()` | 86 | no | **no** |
+| `<input webkitdirectory>` | 7 | 11.1 | 18.4 |
+| `storage.persist()` | 55 | 15.2 | 15.2 |
+
+So on an iPad the panel says that plainly instead of offering a control that does nothing,
+and gives the two things WebKit does allow: **Import from a folder**, which reads one in a
+single shot (iPadOS 18.4+), and **Keep my files**, which asks iOS to stop treating them as
+cache it may drop.
+
+Because the browser forgets a folder permission when it restarts, the panel shows
+**Reconnect** rather than failing silently — re-granting needs a click.
+
 ## Sync (optional)
 
 Everything works offline with no account — the cloud is a layer on top, not a requirement.

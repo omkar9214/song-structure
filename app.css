@@ -862,6 +862,18 @@ body.gig-on{overflow:hidden}
   font-size:calc(13px * var(--gs));line-height:1.5;color:var(--ink-2)}
 .lyr-hint{margin:0 0 9px;font-size:calc(11px * var(--gs));color:var(--muted);line-height:1.45}
 .gig-btn.gig-lyr{width:auto;padding:0 11px;font-size:11px;font-weight:700;letter-spacing:.08em}
+/* ── the resources folder ───────────────────── */
+.resf{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.resf-head{display:flex;align-items:baseline;gap:9px}
+.resf-head b{font-size:13px;font-weight:700;letter-spacing:.01em}
+.resf-state{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  border-radius:99px;padding:2px 9px;background:var(--sunk);color:var(--muted)}
+.resf-state.on{background:color-mix(in srgb,#2b7a4b 16%,transparent);color:#2b7a4b}
+.resf-state.warn{background:var(--accent-soft);color:var(--accent)}
+.resf-acts{display:flex;flex-wrap:wrap;gap:8px}
+.resf-acts .btn{padding:8px 13px;font-size:12.5px}
+@media (hover:none),(pointer:coarse){ .resf-acts .btn{min-height:44px} }
+
 /* ── the sheet music reader ────────────────────── */
 /* Above gig mode (120) and the walk (130): it is opened from on stage, and an
    overlay you cannot see is not an overlay. */

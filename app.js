@@ -1217,6 +1217,7 @@ function pickTrack() {
     song().track = ref;
     save(); render();
     toast(`Added ${ref.name}`);
+    mirrorToFolder(ref, song().title);
     if (Cloud.ready && await Cloud.upload(ref)) save();
   };
   inp.click();
@@ -2060,6 +2061,7 @@ async function addMedia(owner, file) {
   (owner.media = owner.media || []).push(ref);
   save(); render();
   toast(`Attached ${ref.name}`);
+  mirrorToFolder(ref, song().title);
   if (Cloud.ready && await Cloud.upload(ref)) save();
 }
 async function playClip(m, owner) {
@@ -2257,11 +2259,234 @@ function armCloud(on) {
    on the dialog's close event — which some embedded browsers never fire. */
 document.addEventListener('focusin', () => { if (!$('#dlg-cloud').open) armCloud(false); });
 
+/* ─── the resources folder ─────────────────────────────
+   A real folder on the device, so the files are yours to open in Finder and
+   not only the app's.
+
+   It is a **mirror**, never the store of record. IndexedDB stays that, because
+   IndexedDB is what makes the iPad open a chart with no signal, and no part of
+   the stage path moves onto an API the stage device does not have.
+
+   And it does not have it. showDirectoryPicker exists in Chrome and Edge on a
+   desktop and in no browser on iPadOS — every browser there is WebKit, so
+   installing another one changes nothing. Checked against MDN compat data
+   rather than remembered. Where it is missing this says so and offers the two
+   things WebKit does allow: reading a folder in one shot, and asking iOS to
+   stop treating the files as cache it may drop. */
+const canPickFolder = () => typeof window.showDirectoryPicker === 'function';
+const canImportFolder = () => 'webkitdirectory' in document.createElement('input');
+
+let resFolder = null;                 /* { handle, name, granted } once connected */
+
+async function folderLoad() {
+  const rec = await Folder.get();
+  if (!rec || !rec.handle) { resFolder = null; return null; }
+  let granted = false;
+  try { granted = (await rec.handle.queryPermission({ mode: 'readwrite' })) === 'granted'; } catch (_) {}
+  resFolder = { handle: rec.handle, name: rec.name || rec.handle.name, granted };
+  return resFolder;
+}
+
+/* Permission has to be asked for from a click. After a browser restart the
+   folder is remembered but not yet allowed, which is why there is a Reconnect
+   button rather than a silent failure. */
+async function folderGrant() {
+  if (!resFolder) return false;
+  try {
+    const st = await resFolder.handle.requestPermission({ mode: 'readwrite' });
+    resFolder.granted = st === 'granted';
+  } catch (_) { resFolder.granted = false; }
+  return resFolder.granted;
+}
+
+const safeName = t => String(t || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 60);
+
+async function folderWrite(name, blob) {
+  if (!resFolder || !resFolder.granted) return false;
+  try {
+    const fh = await resFolder.handle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(blob);
+    await w.close();
+    return true;
+  } catch (e) { console.warn('[folder] write failed', name, e); return false; }
+}
+
+/* every attachment, named so it is findable in Finder without opening it */
+function folderNameFor(ref, songTitle) {
+  const t = safeName(songTitle || 'Untitled');
+  const n = safeName(ref.name || 'file');
+  return `${t} — ${n}`;
+}
+
+async function mirrorToFolder(ref, songTitle) {
+  if (!resFolder || !resFolder.granted) return;
+  const rec = await Media.get(ref.id).catch(() => null);
+  if (!rec || !rec.blob) return;
+  await folderWrite(folderNameFor(ref, songTitle), rec.blob);
+}
+
+/* everything this device actually holds, written across in one go */
+async function folderCopyAll() {
+  if (!resFolder || !resFolder.granted) return { done: 0, missing: 0 };
+  let done = 0, missing = 0;
+  for (const so of state.songs) {
+    if (so.__setlists) continue;
+    const refs = [];
+    const take = m => { if (m && m.id && !m.clip) refs.push(m); };
+    (so.media || []).forEach(take);
+    if (so.track) take(so.track);
+    (so.sections || []).forEach(sec => {
+      (sec.media || []).forEach(take);
+      sec.bars.forEach(b => (b.media || []).forEach(take));
+    });
+    for (const ref of refs) {
+      const rec = await Media.get(ref.id).catch(() => null);
+      if (!rec || !rec.blob) { missing++; continue; }
+      if (await folderWrite(folderNameFor(ref, so.title), rec.blob)) done++; else missing++;
+    }
+  }
+  return { done, missing };
+}
+
+async function folderPick() {
+  if (!canPickFolder()) return;
+  const had = resFolder && resFolder.granted ? resFolder.name : null;
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ id: 'song-resources', mode: 'readwrite' });
+  } catch (_) { return; }                       /* dismissed — nothing to say */
+  resFolder = { handle, name: handle.name, granted: true };
+  await Folder.put(handle, handle.name);
+  paintFolder();
+  if (!had) {
+    const r = await askFolderCopy(`Copy everything this device holds into "${handle.name}" now?`);
+    if (r) await folderCopyAllWithToast();
+    return;
+  }
+  /* changing folders: copying is a choice, and declining is a real answer —
+     two folders with different material in them is a thing you may want */
+  const r = await askFolderCopy(
+    `The folder is now "${handle.name}". Copy what is on this device across, `
+    + `or leave it empty and let this folder collect its own?`, 'Copy across', 'Leave it empty');
+  if (r) await folderCopyAllWithToast();
+  else toast(`"${handle.name}" left as it is`);
+}
+
+async function folderCopyAllWithToast() {
+  toast('Copying\u2026');
+  const r = await folderCopyAll();
+  toast(r.missing
+    ? `${r.done} copied, ${r.missing} not on this device`
+    : `${r.done} file${r.done === 1 ? '' : 's'} copied`);
+  paintFolder();
+}
+
+/* the confirm dialog, with its own two labels */
+function askFolderCopy(body, yes = 'Copy across', no = 'Not now') {
+  return new Promise(res => {
+    const d = $('#dlg-confirm');
+    $('#confirm-title').textContent = 'Resources folder';
+    $('#confirm-body').textContent = body;
+    const ok = $('#confirm-ok'), cancel = d.querySelector('[data-close]');
+    ok.textContent = yes; ok.className = 'btn primary';
+    cancel.textContent = no;
+    const done = v => { d.close(); res(v); };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+    d.oncancel = () => done(false);       /* Escape, or the last caller's handler answers for us */
+    d.showModal();
+  });
+}
+
+async function folderForget() {
+  if (!await ask('This device will stop writing new files into that folder. Nothing already in it is touched.', 'Disconnect')) return;
+  await Folder.clear();
+  resFolder = null;
+  paintFolder();
+  toast('Folder disconnected');
+}
+
+/* iOS cannot hand a page a folder, but it can be asked to stop treating what
+   is already stored as cache it may drop when it wants the space. */
+async function folderPersist() {
+  if (!navigator.storage || !navigator.storage.persist) return toast('This browser cannot be asked');
+  const ok = await navigator.storage.persist().catch(() => false);
+  toast(ok ? 'Your files are marked to keep' : 'The browser said no — add the app to your Home Screen and try again');
+  paintFolder();
+}
+
+function paintFolder() {
+  const box = $('#resf');
+  if (!box) return;
+  const state$ = $('#resf-state'), help = $('#resf-help'), acts = $('#resf-acts');
+  acts.innerHTML = '';
+  const btn = (label, fn, cls) => {
+    const b = el('button', 'btn ' + (cls || 'ghost'), label);
+    b.type = 'button'; b.onclick = fn; acts.appendChild(b); return b;
+  };
+
+  if (!canPickFolder()) {
+    state$.textContent = 'Not on this device';
+    state$.className = 'resf-state off';
+    help.textContent =
+      'No browser on an iPad or iPhone can be given a folder — they are all WebKit, so another '
+      + 'browser will not help. Your files are kept inside the app instead, which is what makes them '
+      + 'work with no signal. Use a Mac or PC with Chrome to keep a folder you can open yourself.';
+    if (canImportFolder()) btn('Import from a folder', () => $('#resf-import').click());
+    btn('Keep my files', folderPersist);
+    return;
+  }
+
+  if (!resFolder) {
+    state$.textContent = 'Not set';
+    state$.className = 'resf-state off';
+    help.textContent = 'Pick a folder and every file you attach is written into it as a real file, '
+      + 'beside the copy the app keeps. Change it later and you choose whether to bring the files across.';
+    btn('Create resources folder', folderPick, 'primary');
+    return;
+  }
+  if (!resFolder.granted) {
+    state$.textContent = resFolder.name;
+    state$.className = 'resf-state warn';
+    help.textContent = 'The folder is remembered, but this browser asks again after it restarts. '
+      + 'Reconnect and writing carries on.';
+    btn('Reconnect', async () => { if (await folderGrant()) { paintFolder(); toast('Folder reconnected'); } else paintFolder(); }, 'primary');
+    btn('Change folder', folderPick);
+    btn('Disconnect', folderForget);
+    return;
+  }
+  state$.textContent = resFolder.name;
+  state$.className = 'resf-state on';
+  help.textContent = 'Every file you attach is written in here as well. The app keeps its own copy too — '
+    + 'that is the one that works with no signal.';
+  btn('Copy everything across', folderCopyAllWithToast);
+  btn('Change folder', folderPick);
+  btn('Disconnect', folderForget);
+}
+
+/* One shot, read-only, no handle kept: this is all WebKit allows. */
+async function folderImport(files) {
+  const list = [...files].filter(f => f.size && !/^\./.test(f.name));
+  if (!list.length) return toast('Nothing in that folder');
+  const s = song();
+  let n = 0;
+  for (const f of list) {
+    const ref = await Media.put(f);
+    (s.media = s.media || []).push(ref);
+    n++;
+    if (Cloud.ready) await Cloud.upload(ref);
+  }
+  save(); render();
+  toast(`${n} file${n === 1 ? '' : 's'} brought in`);
+}
+
 function cloudDialog(awaitingCode) {
   const d = $('#dlg-cloud');
   msg('');
   armCloud(true);
   paintCloud(awaitingCode);
+  folderLoad().then(paintFolder);
   if (!d.open) d.showModal();
 }
 function closeCloud() { armCloud(false); $('#dlg-cloud').close(); }
@@ -2447,14 +2672,21 @@ Cloud.on((st, user) => {
 /* ─── confirm ───────────────────────────────────────────────────
    prompt()/confirm() are blocked in some embedded browsers and look
    nothing like the app, so both are replaced with real dialogs. */
+/* Everything this dialog shows is set every time it opens — title, button
+   label, button colour, cancel label. It is shared, and anything left behind
+   by the last caller turns up as the heading of the next one. */
 function ask(body, okLabel = 'Delete') {
   return new Promise(res => {
     const d = $('#dlg-confirm');
+    const ok = $('#confirm-ok'), cancel = d.querySelector('[data-close]');
+    $('#confirm-title').textContent = 'Are you sure?';
     $('#confirm-body').textContent = body;
-    $('#confirm-ok').textContent = okLabel;
+    ok.textContent = okLabel;
+    ok.className = 'btn danger-btn';
+    cancel.textContent = 'Cancel';
     const done = yes => { d.close(); res(yes); };
-    $('#confirm-ok').onclick = () => done(true);
-    d.querySelector('[data-close]').onclick = () => done(false);
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
     d.oncancel = () => res(false);          /* Escape */
     d.showModal();
   });
@@ -4013,6 +4245,10 @@ $('#gig-body').addEventListener('pointerup', e => {
 $('#gig-lyrics').onclick   = () => toggleLyrCol();
 $('#gig-score').onclick    = () => { const m = scoresOf()[0]; if (m) openScore(m); };
 $('#score-close').onclick  = closeScore;
+$('#resf-import').onchange = e => { if (e.target.files.length) folderImport(e.target.files); e.target.value = ''; };
+/* pick the folder up at boot so the first attachment of the session is mirrored
+   without having to open the account dialog first */
+folderLoad().catch(() => {});
 $('#score-prev').onclick   = () => scoreGo(-1);
 $('#score-next').onclick   = () => scoreGo(1);
 $('#score-in').onclick     = () => scoreZoom(1.25);

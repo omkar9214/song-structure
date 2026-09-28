@@ -125,3 +125,25 @@ const Vault = (() => {
   };
 })();
 window.Vault = Vault;
+
+/* ─── the resources folder ─────────────────────────────
+   A FileSystemDirectoryHandle survives a structured clone, so it can be kept
+   here and the same folder picked up again next launch — the browser still
+   asks for permission again after a restart, but it remembers which folder.
+   It lives in the vault store under its own id; it is a handle, not a chart,
+   and nothing else reads it. */
+const Folder = {
+  ID: 'resources-folder',
+  async put(handle, name) {
+    try { await dbTx(STORE_VAULT, 'readwrite', s => s.put({ id: this.ID, handle, name, at: Date.now() })); return true; }
+    catch (e) { console.warn('[folder] could not be remembered', e); return false; }
+  },
+  async get() {
+    try { return await dbTx(STORE_VAULT, 'readonly', s => s.get(this.ID)) || null; }
+    catch (_) { return null; }
+  },
+  async clear() {
+    try { await dbTx(STORE_VAULT, 'readwrite', s => s.delete(this.ID)); return true; } catch (_) { return false; }
+  }
+};
+window.Folder = Folder;
