@@ -46,9 +46,11 @@ const Media = (() => {
   const tx = (mode, fn) => dbTx(STORE_MEDIA, mode, fn);
 
   const kind = (type, name = '') => {
+    if (type === 'application/pdf') return 'pdf';
     if (type.startsWith('image/')) return 'image';
     if (type.startsWith('audio/')) return 'audio';
     if (type.startsWith('video/')) return 'video';
+    if (/\.pdf$/i.test(name)) return 'pdf';
     if (/\.(png|jpe?g|gif|webp|heic)$/i.test(name)) return 'image';
     if (/\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(name)) return 'audio';
     if (/\.(mp4|mov|webm|m4v)$/i.test(name)) return 'video';

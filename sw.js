@@ -12,14 +12,19 @@
 
    V must match the ?v= stamp in index.html. If it drifts, nothing breaks —
    the assets are simply cached on first use instead of at install. */
-const V = '20260928-5';
+const V = '20260928-6';
 const CACHE = 'song-structure-' + V;
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',
   `./app.css?v=${V}`, `./config.js?v=${V}`, `./icons.js?v=${V}`,
-  `./db.js?v=${V}`, `./cloud.js?v=${V}`, `./app.js?v=${V}`
+  `./db.js?v=${V}`, `./cloud.js?v=${V}`, `./app.js?v=${V}`,
+  /* The score reader. Pinned files, so they carry no ?v= of their own — the
+     cache name already changes with V, which rebuilds the lot. They are ~1.3 MB
+     and are precached deliberately: a score you cannot open in a room with no
+     signal is not a score you can play from. */
+  './vendor/pdf.min.js', './vendor/pdf.worker.min.js'
 ];
 
 /* Fonts and the Supabase library live on other origins. They were never

@@ -308,6 +308,22 @@ says so instead of showing an empty frame.
 Whether the panel is open is a **per-device** preference, not part of the song — folding
 it must never restamp a song and push a sync.
 
+### Sheet music
+
+Attach a PDF or a photograph of the page in **Resources**. It is read inside the app —
+pages rendered to canvas, fit to the width, pinch-free zoom buttons, page counter — and
+**SCORE** on the gig screen opens it.
+
+This is why `vendor/pdf.min.js` is in the repo. A PDF in an `<iframe>` shows page one and
+nothing else on iOS, reliably, so a multi-page score needs a real renderer. It is vendored
+as plain files (no build step, per the rule above), loaded the first time a score is opened
+rather than at boot, and precached by the service worker — a score you cannot open in a
+room with no signal is not a score you can play from. It costs about 1.3 MB of cache.
+
+Pages are drawn at the device pixel ratio, so a stave is sharp rather than an upscale. A
+zoom press while the first pass is still drawing used to throw: pdf.js refuses two renders
+on one canvas. A new draw now cancels what is in flight and waits for it to settle first.
+
 ### Lyrics
 
 Paste the whole sheet once, off the web, exactly as it comes. Then **Fit lyrics to bars**

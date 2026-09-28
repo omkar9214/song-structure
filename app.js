@@ -673,6 +673,22 @@ function renderResources() {
     + 'so none of them are on the gig screen.'));
   panel.appendChild(g);
 
+  const sg = el('div', 'res-group');
+  sg.appendChild(el('h3', 'res-h', 'Sheet music'));
+  const srow = el('div', 'res-chips');
+  scoresOf(s).forEach(m => srow.appendChild(scoreChip(m)));
+  const addScore = el('button', 'res-add');
+  addScore.type = 'button';
+  addScore.append(icon('plus', 13), el('span', null, scoresOf(s).length ? 'Add another' : 'Attach a score'));
+  addScore.dataset.tip = 'Attach a PDF or a photograph of the music';
+  addScore.onclick = () => pickScore(f => addMedia(s, f));
+  srow.appendChild(addScore);
+  sg.appendChild(srow);
+  sg.appendChild(el('p', 'res-hint',
+    'A PDF or a photograph of the page. It is read inside the app, it is on this device, '
+    + 'and SCORE on the gig screen opens it \u2014 no signal needed.'));
+  panel.appendChild(sg);
+
   const lg = el('div', 'res-group');
   lg.appendChild(el('h3', 'res-h', 'Lyrics'));
   const lrow = el('div', 'res-chips');
@@ -707,6 +723,43 @@ function renderResources() {
   panel.appendChild(lg);
 
   host.appendChild(panel);
+}
+
+function scoreChip(m) {
+  const wrap = el('span', 'res-chip');
+  const go = el('button', 'res-go');
+  go.type = 'button';
+  go.append(icon(m.kind === 'image' ? 'image' : 'file', 13), el('span', null, m.name));
+  go.dataset.tip = `Read ${m.name}`;
+  go.setAttribute('aria-label', go.dataset.tip);
+  go.onclick = () => openScore(m);
+
+  const kill = el('button', 'res-kill');
+  kill.type = 'button';
+  kill.appendChild(icon('x', 12));
+  kill.dataset.tip = `Remove ${m.name}`;
+  kill.setAttribute('aria-label', kill.dataset.tip);
+  kill.onclick = async e => {
+    e.stopPropagation();
+    if (!await ask(`${m.name} will be removed from this song.`, 'Remove')) return;
+    await Media.del(m.id);
+    if (m.remote && Cloud.ready) await Cloud.removeMedia(m.id);
+    const a = song().media || [];
+    const i = a.findIndex(x => x.id === m.id);
+    if (i > -1) a.splice(i, 1);
+    save(); render();
+  };
+  wrap.append(go, kill);
+  return wrap;
+}
+
+function pickScore(cb) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'application/pdf,.pdf,image/*';
+  inp.multiple = true;
+  inp.onchange = () => [...inp.files].forEach(cb);
+  inp.click();
 }
 
 function linkChip(l) {
@@ -1998,7 +2051,7 @@ let pendingClip = null;
 
 function pickMedia(cb) {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'image/*,audio/*,video/*'; inp.multiple = true;
+  inp.type = 'file'; inp.accept = 'image/*,audio/*,video/*,application/pdf,.pdf'; inp.multiple = true;
   inp.onchange = () => [...inp.files].forEach(cb);
   inp.click();
 }
@@ -2054,6 +2107,10 @@ async function openViewer(m, owner) {
   if (m.kind === 'image') { node = el('img'); node.src = url; }
   else if (m.kind === 'audio') { node = el('audio'); node.controls = true; node.autoplay = true; node.src = url; bindVolume(node, m); }
   else if (m.kind === 'video') { node = el('video'); node.controls = true; node.src = url; bindVolume(node, m); }
+  else if (m.kind === 'pdf' || /pdf$/i.test(m.type || '')) {
+    /* a PDF is not a download here — it is read in the app */
+    closeViewer(); return openScore(m);
+  }
   else { node = el('a', null, 'Download ' + m.name); node.href = url; node.download = m.name; }
   body.appendChild(node);
   const rm = $('#viewer-remove');
@@ -3015,6 +3072,8 @@ function renderGig() {
   /* the lyric column, if this song has a sheet and the last gig left it open */
   const lb = $('#gig-lyrics');
   if (lb) lb.hidden = !hasLyrics();
+  const sb = $('#gig-score');
+  if (sb) sb.hidden = !scoresOf().length;
   toggleLyrCol(hasLyrics() && lyrRecall());
 
   fitGigChords();
@@ -3187,6 +3246,162 @@ function autoBuild() {
     t += dur;
   });
   Auto.plan = segs; Auto.total = t;
+}
+
+/* ─── the sheet music ─────────────────────────────────
+   A PDF in an iframe is one page and nothing else on iOS — reliably, every
+   time — so a real score needs a real renderer. pdf.js is vendored into the
+   repo as plain files, no build step, and precached by the service worker,
+   because the whole point of it is the room with no signal.
+
+   It is loaded the first time a score is opened rather than at boot: 313 KB
+   of parser is not something to spend on every launch of a chart that has no
+   PDF on it. An image opens in the same reader, so a photograph of a page and
+   a PDF of one behave identically. */
+let pdfLibP = null;
+function pdfLib() {
+  if (pdfLibP) return pdfLibP;
+  pdfLibP = new Promise((res, rej) => {
+    if (window.pdfjsLib) return res(window.pdfjsLib);
+    const sc = document.createElement('script');
+    sc.src = 'vendor/pdf.min.js';
+    sc.onload = () => {
+      if (!window.pdfjsLib) { pdfLibP = null; return rej(new Error('pdf.js did not define itself')); }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+      res(window.pdfjsLib);
+    };
+    sc.onerror = () => { pdfLibP = null; rej(new Error('pdf.js could not be loaded')); };
+    document.head.appendChild(sc);
+  });
+  return pdfLibP;
+}
+
+/* the same resolution every attachment gets: this device first, the account
+   second, and a straight answer when it is on neither */
+async function mediaURL(m) {
+  let url = await Media.url(m.id);
+  if (!url && m.remote && Cloud.ready) {
+    toast(`Fetching ${m.name}\u2026`);
+    const blob = await Cloud.fetchMedia(m);
+    if (blob) url = URL.createObjectURL(blob);
+  }
+  return url;
+}
+
+const isScore = m => m && (m.kind === 'pdf' || m.kind === 'image' || /pdf$/i.test(m.type || ''));
+const scoresOf = so => ((so || song()).media || []).filter(isScore);
+
+const Score = { pages: [], zoom: 1, at: 0, name: '' };
+
+async function openScore(m) {
+  const url = await mediaURL(m);
+  if (!url) return toast(trackMissingReason(m));
+  const body = $('#score-body');
+  body.innerHTML = '';
+  Score.pages = []; Score.at = 0; Score.zoom = 1; Score.name = m.name || 'Sheet music';
+  $('#score-name').textContent = Score.name;
+  $('#score-pos').textContent = '';
+  $('#score').hidden = false;
+  document.body.classList.add('score-open');
+
+  if (m.kind === 'image' || /^image\//.test(m.type || '')) {
+    const img = el('img', 'score-page');
+    img.src = url; img.alt = Score.name;
+    body.appendChild(img);
+    Score.pages = [img];
+    paintScorePos();
+    return;
+  }
+
+  const note = el('p', 'score-note', 'Opening the score\u2026');
+  body.appendChild(note);
+  let lib;
+  try { lib = await pdfLib(); }
+  catch (_) {
+    note.textContent = navigator.onLine
+      ? 'The score reader could not load. Reload the app once with a signal and it is kept for good.'
+      : 'The score reader is not on this device yet, and there is no signal to fetch it. Open the app once online and it stays.';
+    return;
+  }
+  try {
+    const doc = await lib.getDocument({ url }).promise;
+    note.remove();
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const cv = el('canvas', 'score-page');
+      cv.dataset.page = String(n);
+      body.appendChild(cv);
+      Score.pages.push({ page, cv });
+    }
+    await drawScore();
+    paintScorePos();
+  } catch (e) {
+    note.textContent = 'That file could not be read as a PDF.';
+  }
+}
+
+/* Rendered to the width actually available, times the device pixel ratio, so
+   a stave is sharp on a retina screen rather than a soft upscale.
+
+   pdf.js refuses two renders on one canvas, and a zoom press lands while the
+   first pass is still drawing — measured, it throws. So a new draw cancels
+   every task still in flight and waits for them to settle before starting,
+   and a draw that has been superseded gives up rather than fighting. */
+let drawSeq = 0;
+async function drawScore() {
+  const mine = ++drawSeq;
+  await Promise.all(Score.pages.map(async p => {
+    if (!p || !p.task) return;
+    try { p.task.cancel(); } catch (_) {}
+    try { await p.task.promise; } catch (_) {}   /* cancelling rejects; that is the point */
+    p.task = null;
+  }));
+  if (mine !== drawSeq) return;
+
+  const body = $('#score-body');
+  const avail = Math.max(200, body.clientWidth - 28);
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  for (const p of Score.pages) {
+    if (!p || !p.page) continue;
+    if (mine !== drawSeq) return;
+    const base = p.page.getViewport({ scale: 1 });
+    const scale = (avail * Score.zoom) / base.width;
+    const vp = p.page.getViewport({ scale: scale * dpr });
+    p.cv.width = Math.round(vp.width);
+    p.cv.height = Math.round(vp.height);
+    p.cv.style.width = Math.round(vp.width / dpr) + 'px';
+    p.task = p.page.render({ canvasContext: p.cv.getContext('2d'), viewport: vp });
+    try { await p.task.promise; }
+    catch (e) { p.task = null; if (/cancel/i.test((e && e.name) || '')) return; throw e; }
+    p.task = null;
+  }
+}
+
+function paintScorePos() {
+  const n = Score.pages.length;
+  $('#score-pos').textContent = n > 1 ? `${Math.min(n, Score.at + 1)} / ${n}` : '';
+  $('#score-prev').hidden = n < 2;
+  $('#score-next').hidden = n < 2;
+}
+function scoreGo(d) {
+  const n = Score.pages.length;
+  if (!n) return;
+  Score.at = Math.max(0, Math.min(n - 1, Score.at + d));
+  const node = Score.pages[Score.at].cv || Score.pages[Score.at];
+  node.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  paintScorePos();
+}
+async function scoreZoom(mul) {
+  Score.zoom = Math.max(0.5, Math.min(3, Score.zoom * mul));
+  await drawScore();
+}
+function closeScore() {
+  drawSeq++;                                   /* anything mid-draw is now stale */
+  Score.pages.forEach(p => { if (p && p.task) { try { p.task.cancel(); } catch (_) {} p.task = null; } });
+  $('#score').hidden = true;
+  document.body.classList.remove('score-open');
+  $('#score-body').innerHTML = '';
+  Score.pages = [];
 }
 
 /* ─── the lyric column ───────────────────────────────
@@ -3796,6 +4011,12 @@ $('#gig-body').addEventListener('pointerup', e => {
   if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500) autoPause();
 });
 $('#gig-lyrics').onclick   = () => toggleLyrCol();
+$('#gig-score').onclick    = () => { const m = scoresOf()[0]; if (m) openScore(m); };
+$('#score-close').onclick  = closeScore;
+$('#score-prev').onclick   = () => scoreGo(-1);
+$('#score-next').onclick   = () => scoreGo(1);
+$('#score-in').onclick     = () => scoreZoom(1.25);
+$('#score-out').onclick    = () => scoreZoom(0.8);
 $('#btn-lyrics').onclick   = () => toggleLyrPanel();
 /* the panel is remembered per device: it was opened deliberately, and having
    to reopen it after every launch is the sort of small tax that stops it
@@ -3933,6 +4154,7 @@ document.addEventListener('keydown', e => {
     Tip.hide();
     if (!$('#sheet').hidden) { e.preventDefault(); closeSheet(); return; }
     closeDrawer();
+    if (!$('#score').hidden) return closeScore();
     if (!$('#viewer').hidden) closeViewer();
   }
   const typing = /input|textarea|select/i.test(document.activeElement.tagName) || document.activeElement.isContentEditable;

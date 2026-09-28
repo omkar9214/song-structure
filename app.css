@@ -402,7 +402,7 @@ dialog::backdrop{background:rgba(10,10,14,.5);backdrop-filter:blur(2px)}
 .drawer-foot{margin-top:auto;display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-top:1px solid var(--line)}
 .drawer-foot .btn{flex:1 1 calc(50% - 6px);justify-content:center;white-space:nowrap}
 
-.viewer{position:fixed;inset:0;z-index:70;background:rgba(6,6,10,.78);backdrop-filter:blur(3px);
+.viewer{position:fixed;inset:0;z-index:160;background:rgba(6,6,10,.78);backdrop-filter:blur(3px);
   display:flex;align-items:center;justify-content:center;padding:24px}
 .viewer-inner{background:var(--panel);border-radius:14px;max-width:min(920px,94vw);max-height:90vh;display:flex;
   flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
@@ -694,7 +694,7 @@ body.gig-on{overflow:hidden}
      player, no buttons to add or open anything, no carets on the regions. */
   .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.add-bar,.barline-btn,.barline-add,.add-section-row,
   .drawer,.viewer,.toast,.tip,.gig,.sheet-menu,
-  .track-bar,.res-bar,.fit,.lyr-col,.lyr-panel,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
+  .track-bar,.res-bar,.fit,.score,.lyr-col,.lyr-panel,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
   body.lyr-open{padding-right:0}
   .r-mid{padding:0 8px}                       /* the caret is gone, so is its gutter */
   body{background:#fff;color:#000}
@@ -862,6 +862,28 @@ body.gig-on{overflow:hidden}
   font-size:calc(13px * var(--gs));line-height:1.5;color:var(--ink-2)}
 .lyr-hint{margin:0 0 9px;font-size:calc(11px * var(--gs));color:var(--muted);line-height:1.45}
 .gig-btn.gig-lyr{width:auto;padding:0 11px;font-size:11px;font-weight:700;letter-spacing:.08em}
+/* ── the sheet music reader ────────────────────── */
+/* Above gig mode (120) and the walk (130): it is opened from on stage, and an
+   overlay you cannot see is not an overlay. */
+.score{position:fixed;inset:0;z-index:140;background:var(--bg);display:flex;flex-direction:column}
+.score[hidden]{display:none!important}
+.score-top{display:flex;align-items:center;gap:6px;padding:8px 10px;
+  padding-top:calc(8px + env(safe-area-inset-top));border-bottom:1px solid var(--line);
+  background:var(--panel);flex:none}
+.score-top b{font-size:14px;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.score-pos{font-family:var(--mono);font-size:11.5px;color:var(--muted);flex:none;padding:0 4px}
+.score-body{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;
+  align-items:center;gap:14px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:var(--sunk)}
+/* white behind every page, in both themes: a score is ink on paper, and a
+   dark card behind a transparent PDF turns the staves invisible */
+.score-page{display:block;max-width:100%;background:#fff;border-radius:6px;
+  box-shadow:var(--shadow);height:auto}
+.score-note{margin:0;padding:30px 16px;color:var(--muted);font-size:13px;text-align:center;
+  max-width:46ch;line-height:1.5}
+#score-prev[hidden],#score-next[hidden]{display:none!important}
+.gig-btn.gig-lyr[hidden]{display:none!important}
 /* The same sheet on the normal screen. Fixed to the right rather than folded
    into the page: the chart is a scrolling document, so a panel in the flow
    would scroll away from the bars it describes. The body gives up the width
