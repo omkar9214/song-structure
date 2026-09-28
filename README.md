@@ -127,7 +127,15 @@ signature says and keyframe stops cannot be a CSS variable.
 
 At phone width the gig bar is already exactly full, so there the pulse wraps onto its own
 line under it rather than squeezing the song title away. The jump menu hangs off the bar's
-measured height for that reason, not a fixed 56px.
+measured height for that reason, not a fixed 56px — and the bar's height is not fixed: a
+title too long for one line takes a second one.
+
+The title and the setlist position used to be two controls side by side, and between them
+they left the title 165px on an iPad in portrait — with SCORE and LYRICS both present, a
+long title was simply cut off. They are one control now: the title carries the position in
+its own text flow, so it wraps with the last word, and the whole thing is the button that
+opens the running order. Below 820px the title has a floor of 160px that nothing may push
+it under; whatever else has to wrap to a second row, wraps.
 
 **Tap** beside it plays the tempo in rather than typing a number you guessed. Tap along
 four times or more and the BPM follows you; the pulse re-phases on every tap, so the
@@ -208,8 +216,9 @@ scroll position on WebKit before); instead nothing in the drawer but the list ma
 list keeps its overflow to itself, and a wheel outside the list is swallowed.
 
 A setlist is one gig: a named, ordered list of songs, in the second tab of the drawer.
-**Start** opens the first song in gig mode and `‹` `›` walk the running order; the setlist
-name in the gig bar drops down a list to jump to any song in it. Setlists hold ids, not
+**Start** opens the first song in gig mode and `‹` `›` walk the running order; the song
+title in the gig bar reads *At Last  2/20* and tapping it drops down the running order to
+jump to any song in it. Setlists hold ids, not
 copies — deleting a song only takes it out of the running order — and they sync with your
 songs when you are signed in.
 

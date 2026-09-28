@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260928-7">
+<link rel="stylesheet" href="app.css?v=20260928-8">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -402,12 +402,15 @@
 <div class="gig" id="gig" role="dialog" aria-modal="true" aria-label="Gig mode" hidden>
   <header class="gig-bar">
     <button class="gig-btn" id="gig-prev" data-icon="caretLeft" aria-label="Previous song in the setlist"></button>
-    <div class="gig-head">
-      <b id="gig-name"></b>
-      <span id="gig-meta"></span>
-    </div>
+    <!-- The title is the jump menu. It used to be a label with a separate
+         "4 / 18" button beside it, and the two together left the title 165px
+         on an iPad in portrait — long titles were cut off. One control now:
+         the song you are on, where you are in the set, and tap to change. -->
+    <button class="gig-head" id="gig-head" type="button">
+      <span class="gh-top"><b id="gig-name"></b><span class="gh-n" id="gig-pos" hidden></span></span>
+      <span class="gh-meta" id="gig-meta"></span>
+    </button>
     <div class="gig-pulse pulse-dots" id="gig-pulse" hidden aria-hidden="true"></div>
-    <button class="gig-pos" id="gig-pos" aria-haspopup="true" aria-expanded="false" hidden></button>
     <button class="gig-btn gig-lyr" id="gig-score" aria-label="Show the sheet music" hidden>SCORE</button>
     <button class="gig-btn gig-lyr" id="gig-lyrics" aria-label="Show the lyrics beside the chart" aria-expanded="false" hidden>LYRICS</button>
     <button class="gig-btn" id="gig-auto" aria-label="Auto-scroll the chart in time with the song"></button>
@@ -494,10 +497,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260928-7"></script>
-<script src="icons.js?v=20260928-7"></script>
-<script src="db.js?v=20260928-7"></script>
-<script src="cloud.js?v=20260928-7"></script>
-<script src="app.js?v=20260928-7"></script>
+<script src="config.js?v=20260928-8"></script>
+<script src="icons.js?v=20260928-8"></script>
+<script src="db.js?v=20260928-8"></script>
+<script src="cloud.js?v=20260928-8"></script>
+<script src="app.js?v=20260928-8"></script>
 </body>
 </html>

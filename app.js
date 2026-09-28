@@ -3247,11 +3247,11 @@ function toggleJump() {
     panel.appendChild(b);
   });
   panel.hidden = false;
-  $('#gig-pos').setAttribute('aria-expanded', 'true');
+  $('#gig-head').setAttribute('aria-expanded', 'true');
 }
 function closeJump() {
   $('#gig-jump').hidden = true;
-  $('#gig-pos').setAttribute('aria-expanded', 'false');
+  $('#gig-head').setAttribute('aria-expanded', 'false');
 }
 
 function renderGig() {
@@ -3273,14 +3273,28 @@ function renderGig() {
   $('#gig-next').hidden = !inList;
   $('#gig-prev').disabled = !inList || i === 0;
   $('#gig-next').disabled = !inList || i === songs.length - 1;
-  const pos = $('#gig-pos');
-  pos.innerHTML = '';
+  /* The position sits inside the title — "At Last  2/20" — and the whole
+     thing is the button that opens the setlist. Out of a setlist there is
+     nothing to jump to, so it goes back to being a plain label. */
+  const pos = $('#gig-pos'), head = $('#gig-head');
+  pos.textContent = inList ? `${i + 1}/${songs.length}` : '';
+  pos.hidden = !inList;
+  head.classList.toggle('plain', !inList);
   if (inList) {
-    pos.append(el('span', 'gp-name', l.name + '  \u00b7'), el('span', 'gp-n', `${i + 1}/${songs.length}`));
-    pos.setAttribute('aria-label', `${l.name}, song ${i + 1} of ${songs.length} — jump to another`);
+    head.setAttribute('aria-haspopup', 'true');
+    head.setAttribute('aria-expanded', $('#gig-jump').hidden ? 'false' : 'true');
+    head.setAttribute('aria-label',
+      `${s.title || 'Untitled'} — ${l.name}, song ${i + 1} of ${songs.length}. Jump to another song`);
+    /* which set you are playing used to be printed beside the number; it
+       moves down to the second line rather than being dropped */
+    const meta = $('#gig-meta');
+    meta.textContent = meta.textContent ? meta.textContent + '  ·  ' + l.name : l.name;
+  } else {
+    head.removeAttribute('aria-haspopup');
+    head.removeAttribute('aria-expanded');
+    head.removeAttribute('aria-label');
+    closeJump();
   }
-  $('#gig-pos').hidden = !inList;
-  if (!inList) closeJump();
 
   const host = $('#gig-body');
   host.innerHTML = '';
@@ -4220,7 +4234,7 @@ $('#btn-new-song').onclick = () => {
 $('#btn-pdf').onclick      = exportPDF;
 $('#btn-gig').onclick      = gigOn;
 $('#gig-close').onclick    = gigOff;
-$('#gig-pos').onclick      = toggleJump;
+$('#gig-head').onclick     = toggleJump;
 $('#gig-body').addEventListener('pointerdown', closeJump);
 $('#gig-prev').onclick     = () => gigStep(-1);
 $('#gig-next').onclick     = () => gigStep(1);
