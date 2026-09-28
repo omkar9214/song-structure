@@ -88,6 +88,11 @@ The `songs` table is `(owner, id, data jsonb, updated_at)`. One row per song, pl
 - Reconciliation is **per song, against a per-device base stamp** (`state.syncBase`), not a
   naive newest-wins: if both sides changed since the base, the local copy stays live and the
   other device's version is kept as a separate song. **Nothing is ever silently discarded.**
+- **Setlists are newest-wins as a whole row, and that is settled** (Omkar, 2026-09-28,
+  asked and answered after three earlier offers). He edits setlists on one device at a
+  time, so the both-moved case does not arise in practice, and a running order merged
+  half-and-half would be worse than either version. Do **not** propose per-setlist stamps,
+  keep-both, or a conflict toast for setlists again.
 - Anything that writes setlists goes through `saveLists()`, never `save()` — editing a
   setlist must not restamp the open song.
 - Never invent a timestamp for something pulled from the server; a made-up stamp outranks it.
