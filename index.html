@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260928-3">
+<link rel="stylesheet" href="app.css?v=20260928-4">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -29,6 +29,7 @@
   <div class="topbar-actions">
     <button id="btn-songs" class="btn ghost" data-icon="list" data-tip="All your songs" aria-label="Songs"><span class="lbl">Songs</span></button>
     <button id="btn-new-song" class="btn ghost" data-icon="filePlus" data-tip="Start a new, empty song" aria-label="New song"><span class="lbl">New</span></button>
+    <button id="btn-lyrics" class="btn ghost" data-icon="lyrics" data-tip="The lyrics, with each chord over the words it lands on — and where you fit them" aria-label="Lyrics" aria-expanded="false"><span class="lbl">Lyrics</span></button>
     <button id="btn-gig" class="btn ghost" data-icon="play" data-tip="Gig mode — the chart big and read-only, nothing to knock out of place. Press G" aria-label="Gig mode"><span class="lbl">Gig</span></button>
     <button id="btn-pdf" class="btn ghost" data-icon="print" data-tip="Save this chart as a PDF (choose “Save as PDF” in the print dialog)" aria-label="Save as PDF"><span class="lbl">PDF</span></button>
     <button id="btn-save" class="btn" data-icon="save" data-tip="Save now — the chart is already kept on this device, this pushes it to your account" aria-label="Save"><span class="lbl">Save</span></button>
@@ -427,6 +428,18 @@
   </div>
 </div>
 
+<!-- ── The lyrics beside the chart, on the normal screen ── -->
+<aside class="lyr-panel" id="lyr-panel" aria-label="Lyrics" hidden>
+  <div class="lyr-panel-top">
+    <b>Lyrics</b>
+    <span style="flex:1"></span>
+    <button type="button" class="btn ghost lyr-act" id="lyr-panel-fit">Fit to bars</button>
+    <button type="button" class="btn ghost lyr-act" id="lyr-panel-edit">Sheet</button>
+    <button type="button" class="btn ghost" id="lyr-panel-close" data-icon="x" aria-label="Close the lyrics"></button>
+  </div>
+  <div class="lyr-panel-body" id="lyr-panel-body"></div>
+</aside>
+
 <!-- ── Fitting the lyrics to the bars ─────────────── -->
 <div class="fit" id="fit" role="dialog" aria-modal="true" aria-label="Fit lyrics to bars" hidden>
   <header class="fit-top">
@@ -459,10 +472,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260928-3"></script>
-<script src="icons.js?v=20260928-3"></script>
-<script src="db.js?v=20260928-3"></script>
-<script src="cloud.js?v=20260928-3"></script>
-<script src="app.js?v=20260928-3"></script>
+<script src="config.js?v=20260928-4"></script>
+<script src="icons.js?v=20260928-4"></script>
+<script src="db.js?v=20260928-4"></script>
+<script src="cloud.js?v=20260928-4"></script>
+<script src="app.js?v=20260928-4"></script>
 </body>
 </html>

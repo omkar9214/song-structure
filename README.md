@@ -329,7 +329,9 @@ Edit the pasted sheet and the cuts are re-found in one forward pass, because the
 in order. A cut whose words are gone from the new sheet is **written back onto its bar as
 typed text**, never dropped — the bar is unlinked from the sheet, not emptied.
 
-On stage, **LYRICS** in the gig bar opens a column beside the chart. It costs the chart
+**Lyrics** in the top bar opens the sheet beside the chart while you work, and carries
+**Fit to bars** in its header — which is where you start from, not a button folded away
+inside Resources. On stage, **LYRICS** in the gig bar shows the same thing. It costs the chart
 250px while it is open, which is why it is a button and not a fixture, and the choice is
 remembered per device. On a phone there is no room to share, so the column covers the
 chart and you flip between them.

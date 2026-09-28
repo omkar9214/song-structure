@@ -473,6 +473,7 @@ function paint() {
 
   renderTrack();
   renderResources();
+  paintLyrPanel();
   renderRoadmap();
 
   const host = $('#sections');
@@ -699,8 +700,8 @@ function renderResources() {
   lg.appendChild(lrow);
   lg.appendChild(el('p', 'res-hint', hasLyrics()
     ? `${cutCount()} bar${cutCount() === 1 ? '' : 's'} carry words from this sheet. `
-      + 'On stage the LYRICS button opens the sheet beside the chart, and the line being '
-      + 'sung lights up as you go.'
+      + 'The Lyrics button in the top bar shows it beside the chart, with each chord over '
+      + 'the words it lands on \u2014 and LYRICS does the same in gig mode.'
     : 'Paste the whole sheet once, then point the words at the bars \u2014 no typing. '
       + 'It works with no signal; nothing here is fetched.'));
   panel.appendChild(lg);
@@ -956,6 +957,7 @@ function closeFit() {
   $('#fit').hidden = true;
   document.body.classList.remove('fit-open');
   save(); render();
+  paintLyrPanel();
 }
 
 function fitPlace() {
@@ -3215,20 +3217,20 @@ const ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 const ordinal = n => ORD[n] || (n + 'th');
 const chordOf = bar => (bar.beats || []).filter(Boolean).join(' ');
 
-function paintLyrCol() {
-  const col = $('#lyr-col');
-  if (!col || col.hidden) return;
-  col.innerHTML = '';
+/* One chord sheet, shown in two places: the column in gig mode and the panel
+   on the normal screen. Building it into a fragment rather than into a named
+   element is what keeps those two from drifting apart. */
+function lyrSheet() {
+  const f = document.createDocumentFragment();
   const L = lyricsOf();
-  if (!L || !L.text.trim()) return;
-  col.appendChild(el('h4', 'lyr-h', 'Lyrics'));
+  if (!L || !L.text.trim()) return f;
 
   const cuts = L.cuts || [];
   if (!cuts.length) {
-    col.appendChild(el('p', 'lyr-hint',
+    f.appendChild(el('p', 'lyr-hint',
       'Fit the lyrics to the bars and each chord appears over the words it lands on.'));
-    col.appendChild(el('pre', 'lyr-raw', L.text));
-    return;
+    f.appendChild(el('pre', 'lyr-raw', L.text));
+    return f;
   }
 
   /* In playing order, because that is the order it is read in. A region
@@ -3248,14 +3250,14 @@ function paintLyrCol() {
       const head = el('div', 'lyr-sec');
       head.appendChild(el('span', null, sec.name || 'Region'));
       if (rep > 1) head.appendChild(el('span', 'lyr-pass', ordinal(p) + ' time'));
-      col.appendChild(head);
+      f.appendChild(head);
       const flow = el('div', 'lyr-flow');
       pairs.forEach(x => {
         const pair = el('span', 'lyr-pair' + (x.ch ? '' : ' bare'));
-        pair.append(el('span', 'lyr-ch', x.ch || '·'), el('span', 'lyr-wd', x.w));
+        pair.append(el('span', 'lyr-ch', x.ch || '\u00b7'), el('span', 'lyr-wd', x.w));
         flow.appendChild(pair);
       });
-      col.appendChild(flow);
+      f.appendChild(flow);
     }
   });
 
@@ -3266,8 +3268,64 @@ function paintLyrCol() {
   if (rest) {
     const head = el('div', 'lyr-sec');
     head.appendChild(el('span', null, 'Not fitted yet'));
-    col.appendChild(head);
-    col.appendChild(el('pre', 'lyr-raw', rest));
+    f.appendChild(head);
+    f.appendChild(el('pre', 'lyr-raw', rest));
+  }
+  return f;
+}
+
+function paintLyrCol() {
+  const col = $('#lyr-col');
+  if (!col || col.hidden) return;
+  col.innerHTML = '';
+  if (!hasLyrics()) return;
+  col.appendChild(el('h4', 'lyr-h', 'Lyrics'));
+  col.appendChild(lyrSheet());
+}
+
+/* ─── the same sheet on the normal screen ──────────────────
+   Fitting the words is editing work, and it was reachable only from inside a
+   folded-away panel — which meant it could not be found. The top bar carries
+   it now, and the same button shows the sheet while you work on the chart. */
+let lyrPanelOpen = false;
+
+function toggleLyrPanel(on) {
+  const panel = $('#lyr-panel');
+  if (!panel) return;
+  lyrPanelOpen = on == null ? !lyrPanelOpen : !!on;
+  panel.hidden = !lyrPanelOpen;
+  document.body.classList.toggle('lyr-open', lyrPanelOpen);
+  const b = $('#btn-lyrics');
+  if (b) { b.classList.toggle('on', lyrPanelOpen); b.setAttribute('aria-expanded', String(lyrPanelOpen)); }
+  if (on == null) { try { localStorage.setItem('song-structure.lyrpanel', lyrPanelOpen ? '1' : '0'); } catch (_) {} }
+  paintLyrPanel();
+}
+
+function paintLyrPanel() {
+  const body = $('#lyr-panel-body');
+  if (!body || !lyrPanelOpen) return;
+  body.innerHTML = '';
+  const has = hasLyrics();
+  $('#lyr-panel-fit').hidden = !has;
+  $('#lyr-panel-edit').textContent = has ? 'Sheet' : 'Paste';
+  if (!has) {
+    body.appendChild(el('p', 'lyr-hint',
+      'Nothing pasted yet. Copy the lyric sheet off the web, paste it in whole, then fit '
+      + 'the words to the bars \u2014 you never type a word twice.'));
+    const b = el('button', 'btn primary');
+    b.type = 'button';
+    b.textContent = 'Paste the lyrics';
+    b.onclick = lyricsDialog;
+    body.appendChild(b);
+    return;
+  }
+  body.appendChild(lyrSheet());
+  if (!cutCount()) {
+    const b = el('button', 'btn primary lyr-cta');
+    b.type = 'button';
+    b.textContent = 'Fit lyrics to bars';
+    b.onclick = openFit;
+    body.appendChild(b);
   }
 }
 
@@ -3730,6 +3788,14 @@ $('#gig-body').addEventListener('pointerup', e => {
   if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500) autoPause();
 });
 $('#gig-lyrics').onclick   = () => toggleLyrCol();
+$('#btn-lyrics').onclick   = () => toggleLyrPanel();
+/* the panel is remembered per device: it was opened deliberately, and having
+   to reopen it after every launch is the sort of small tax that stops it
+   being used at all */
+try { if (localStorage.getItem('song-structure.lyrpanel') === '1') toggleLyrPanel(true); } catch (_) {}
+$('#lyr-panel-close').onclick = () => toggleLyrPanel(false);
+$('#lyr-panel-fit').onclick   = openFit;
+$('#lyr-panel-edit').onclick  = lyricsDialog;
 $('#fit-place').onclick    = fitPlace;
 $('#fit-skip').onclick     = fitSkip;
 $('#fit-back').onclick     = fitBack;
