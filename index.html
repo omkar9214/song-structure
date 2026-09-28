@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260928-1">
+<link rel="stylesheet" href="app.css?v=20260928-2">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -303,6 +303,24 @@
   </div>
 </dialog>
 
+<!-- ── The lyric sheet, pasted whole ───────────────── -->
+<dialog id="dlg-lyrics" aria-labelledby="lyrics-h">
+  <div class="dlg lyrics">
+    <h2 id="lyrics-h">Lyrics</h2>
+    <p class="dlg-note" id="lyrics-note"></p>
+    <label class="field">
+      <span class="sr-only">The lyric sheet</span>
+      <textarea id="lyrics-text" class="lyrics-in" rows="14" spellcheck="false" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Paste the whole sheet here…"></textarea>
+    </label>
+    <menu class="dlg-actions">
+      <button type="button" class="btn ghost danger-btn" id="lyrics-clear">Remove</button>
+      <span style="flex:1"></span>
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="lyrics-save">Save</button>
+    </menu>
+  </div>
+</dialog>
+
 <!-- ── Confirm ──────────────────────────────────────────────── -->
 <dialog id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
   <div class="dlg confirm">
@@ -382,6 +400,7 @@
     </div>
     <div class="gig-pulse pulse-dots" id="gig-pulse" hidden aria-hidden="true"></div>
     <button class="gig-pos" id="gig-pos" aria-haspopup="true" aria-expanded="false" hidden></button>
+    <button class="gig-btn gig-lyr" id="gig-lyrics" aria-label="Show the lyrics beside the chart" aria-expanded="false" hidden>LYRICS</button>
     <button class="gig-btn" id="gig-auto" aria-label="Auto-scroll the chart in time with the song"></button>
     <button class="gig-btn" id="gig-speed-btn" data-icon="sliders" aria-label="Scroll speed" aria-expanded="false"></button>
     <button class="gig-btn" id="gig-smaller" aria-label="Smaller type">A<span class="gig-sub">−</span></button>
@@ -402,7 +421,29 @@
   </div>
   <div class="gig-jump" id="gig-jump" hidden></div>
   <div class="gig-prog" id="gig-prog" aria-hidden="true"><i id="gig-prog-fill"></i></div>
-  <div class="gig-body" id="gig-body"></div>
+  <div class="gig-split">
+    <div class="gig-body" id="gig-body"></div>
+    <aside class="lyr-col" id="lyr-col" aria-label="Lyrics" hidden></aside>
+  </div>
+</div>
+
+<!-- ── Fitting the lyrics to the bars ─────────────── -->
+<div class="fit" id="fit" role="dialog" aria-modal="true" aria-label="Fit lyrics to bars" hidden>
+  <header class="fit-top">
+    <div class="fit-head">
+      <b>Fit lyrics to bars</b>
+      <span id="fit-where"></span>
+    </div>
+    <span class="fit-count" id="fit-count"></span>
+    <button class="gig-btn" id="fit-back" aria-label="Undo the last one">Back</button>
+    <button class="gig-btn" id="fit-skip" aria-label="Leave this bar blank">Skip</button>
+    <button class="gig-btn fit-go" id="fit-place" aria-label="Put the selected words on this bar">Place</button>
+    <button class="gig-btn gig-x" id="fit-done" data-icon="check" aria-label="Done"></button>
+  </header>
+  <div class="fit-body">
+    <div class="fit-sheet" id="fit-sheet"></div>
+    <div class="fit-chart" id="fit-chart"></div>
+  </div>
 </div>
 
 <!-- ── Action sheet (touch) ─────────────────────────────────── -->
@@ -418,10 +459,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260928-1"></script>
-<script src="icons.js?v=20260928-1"></script>
-<script src="db.js?v=20260928-1"></script>
-<script src="cloud.js?v=20260928-1"></script>
-<script src="app.js?v=20260928-1"></script>
+<script src="config.js?v=20260928-2"></script>
+<script src="icons.js?v=20260928-2"></script>
+<script src="db.js?v=20260928-2"></script>
+<script src="cloud.js?v=20260928-2"></script>
+<script src="app.js?v=20260928-2"></script>
 </body>
 </html>

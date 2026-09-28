@@ -561,6 +561,7 @@ body.gig-on{overflow:hidden}
 .g-ch{font-size:calc(32px * var(--gs));font-weight:600;letter-spacing:-.03em;line-height:1.1;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .g-chords.split .g-ch{font-size:calc(20px * var(--gs))}
+.g-ch.wrapped{white-space:normal;overflow-wrap:anywhere;line-height:1.15;text-overflow:clip}
 /* the cue wraps rather than truncating — on stage a half-read cue is no cue */
 .g-lyric{margin-top:5px;min-height:calc(15px * var(--gs));text-align:center;font-size:calc(11.5px * var(--gs));
   line-height:1.3;font-weight:600;color:var(--ink-2);overflow-wrap:anywhere}
@@ -688,7 +689,7 @@ body.gig-on{overflow:hidden}
      player, no buttons to add or open anything, no carets on the regions. */
   .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.add-bar,.barline-btn,.barline-add,.add-section-row,
   .drawer,.viewer,.toast,.tip,.gig,.sheet-menu,
-  .track-bar,.res-bar,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
+  .track-bar,.res-bar,.fit,.lyr-col,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
   .r-mid{padding:0 8px}                       /* the caret is gone, so is its gutter */
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}
@@ -816,6 +817,99 @@ body.gig-on{overflow:hidden}
 @media (hover:none),(pointer:coarse){
   .res-go,.res-add,.res-toggle{min-height:44px}
   .res-kill{min-height:44px;width:44px}
+}
+
+/* ── lyrics: the sheet, the column, the walk ──────── */
+.dlg.lyrics{width:min(620px,94vw)}
+.lyrics-in{border:1px solid var(--line-strong);background:var(--sunk);border-radius:8px;
+  padding:11px 12px;font-size:14px;line-height:1.55;color:var(--ink);width:100%;
+  font-family:var(--font);resize:vertical;outline:none;min-height:180px;
+  transition:border-color var(--t),box-shadow var(--t)}
+.lyrics-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+/* the column beside the chart on stage */
+.gig-split{flex:1;display:flex;min-height:0}
+.lyr-col{width:250px;flex:none;border-left:1px solid var(--line);background:var(--panel);
+  overflow:auto;padding:12px 14px 40px;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain}
+.lyr-col[hidden]{display:none!important}
+.lyr-h{margin:0 0 8px;font-size:calc(10.5px * var(--gs));font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted)}
+.lyr-text{margin:0;font-family:var(--font);white-space:pre-wrap;word-break:break-word;
+  font-size:calc(14px * var(--gs));line-height:1.55;color:var(--ink-2)}
+.lyr-on{background:var(--accent-soft);color:var(--ink);border-radius:4px;
+  box-shadow:0 0 0 2px var(--accent-soft)}
+.gig-btn.gig-lyr{width:auto;padding:0 11px;font-size:11px;font-weight:700;letter-spacing:.08em}
+.gig-btn.gig-lyr[hidden]{display:none!important}
+/* the bar whose words are lit, so the chart and the column agree */
+.g-bar.singing{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.g-bar.singing .g-lyric{color:var(--ink);font-weight:600}
+
+/* the walk */
+.fit{position:fixed;inset:0;z-index:130;background:var(--bg);display:flex;flex-direction:column}
+.fit[hidden]{display:none!important}
+/* .fit-top, not .fit-bar: a bar of the chart below is also a .fit-bar, and
+   its flex-direction:column was laying this header out as a stack. */
+.fit-top{display:flex;align-items:center;gap:6px;padding:8px 10px;
+  padding-top:calc(8px + env(safe-area-inset-top));border-bottom:1px solid var(--line);
+  background:var(--panel);flex:none}
+.fit-head{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25;padding-left:2px}
+.fit-head b{font-size:15px;font-weight:700;letter-spacing:-.01em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fit-head span{font-size:11.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fit-count{font-family:var(--mono);font-size:11.5px;color:var(--muted);flex:none;padding:0 4px}
+.gig-btn.fit-go{width:auto;padding:0 16px;font-size:13px;font-weight:650;
+  background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.gig-btn.fit-go:hover{filter:brightness(1.08);background:var(--accent);color:var(--accent-ink)}
+#fit-back,#fit-skip{width:auto;padding:0 12px;font-size:12.5px}
+.fit-body{flex:1;display:flex;min-height:0}
+.fit-sheet{flex:1;min-width:0;overflow:auto;padding:16px 18px 40px;font-size:17px;
+  line-height:1.85;white-space:pre-wrap;word-break:break-word;color:var(--muted);
+  border-right:1px solid var(--line);-webkit-overflow-scrolling:touch}
+.fw{border-radius:5px;padding:2px 3px;margin:0 -1px;cursor:pointer;
+  transition:background var(--t),color var(--t)}
+.fw:hover{background:var(--sunk);color:var(--ink-2)}
+.fw.used{color:var(--line-strong)}
+.fw.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.fit-chart{width:340px;flex:none;overflow:auto;padding:14px 14px 40px;background:var(--sunk);
+  -webkit-overflow-scrolling:touch}
+.fit-strip{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:12px 0 6px}
+.fit-strip:first-child{margin-top:0}
+.fit-row{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.fit-bar{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;
+  border:1px solid var(--line-strong);background:var(--panel);border-radius:9px;
+  padding:7px 9px;min-height:56px;transition:border-color var(--t),background var(--t)}
+.fit-bar:hover{border-color:var(--accent)}
+.fit-no{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.fit-ch{font-size:15px;font-weight:650;color:var(--ink);line-height:1.15;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.fit-ly{font-size:11px;color:var(--accent);line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.fit-bar.now{border-color:var(--accent);background:var(--accent-soft);
+  box-shadow:0 0 0 2px var(--accent)}
+
+@media(max-width:900px){
+  /* portrait: the sheet on top, the bars underneath, the way you read them */
+  .fit-body{flex-direction:column}
+  .fit-sheet{flex:0 0 46%;border-right:none;border-bottom:1px solid var(--line);font-size:16px}
+  .fit-chart{width:auto;flex:1}
+  .fit-row{grid-template-columns:repeat(4,1fr)}
+}
+@media(max-width:560px){
+  .fit-row{grid-template-columns:repeat(2,1fr)}
+  .lyr-col{width:200px}
+  #fit-back,#fit-skip{padding:0 9px;font-size:12px}
+}
+@media (hover:none),(pointer:coarse){
+  /* A word is a tap target here, so the lines are set further apart than
+     reading alone would need — 28px of word was not enough with a thumb. */
+  /* line-height spaces the lines; it does not grow an inline box's hit area,
+     which is font size plus padding. So the padding is what has to give. */
+  .fit-sheet{line-height:2.4}
+  .fw{padding:9px 5px;margin:0 -3px}
+  .fit-bar{min-height:62px}
 }
 
 /* ── attach chooser ─────────────────────────────────────── */

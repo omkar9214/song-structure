@@ -671,6 +671,40 @@ function renderResources() {
     + 'inside the app; Amazon Music and Bandcamp open outside it. Every link needs signal, '
     + 'so none of them are on the gig screen.'));
   panel.appendChild(g);
+
+  const lg = el('div', 'res-group');
+  lg.appendChild(el('h3', 'res-h', 'Lyrics'));
+  const lrow = el('div', 'res-chips');
+  if (hasLyrics()) {
+    const sheet = el('button', 'res-add');
+    sheet.type = 'button';
+    const lines = lyricsOf().text.trim().split(/\n+/).length;
+    sheet.append(icon('list', 13), el('span', null, `The sheet \u00b7 ${lines} line${lines === 1 ? '' : 's'}`));
+    sheet.dataset.tip = 'Read or edit the pasted lyrics';
+    sheet.onclick = lyricsDialog;
+    const fit = el('button', 'res-add res-key');
+    fit.type = 'button';
+    fit.append(icon('scissors', 13), el('span', null, cutCount() ? 'Fit more lyrics' : 'Fit lyrics to bars'));
+    fit.dataset.tip = 'Point the words at the bars they are sung over';
+    fit.onclick = openFit;
+    lrow.append(sheet, fit);
+  } else {
+    const paste = el('button', 'res-add');
+    paste.type = 'button';
+    paste.append(icon('plus', 13), el('span', null, 'Paste the lyrics'));
+    paste.dataset.tip = 'Paste the whole lyric sheet, copied off the web';
+    paste.onclick = lyricsDialog;
+    lrow.appendChild(paste);
+  }
+  lg.appendChild(lrow);
+  lg.appendChild(el('p', 'res-hint', hasLyrics()
+    ? `${cutCount()} bar${cutCount() === 1 ? '' : 's'} carry words from this sheet. `
+      + 'On stage the LYRICS button opens the sheet beside the chart, and the line being '
+      + 'sung lights up as you go.'
+    : 'Paste the whole sheet once, then point the words at the bars \u2014 no typing. '
+      + 'It works with no signal; nothing here is fetched.'));
+  panel.appendChild(lg);
+
   host.appendChild(panel);
 }
 
@@ -750,6 +784,274 @@ function openLink(l) {
     removeLink(l); closeViewer();
   };
   $('#viewer').hidden = false;
+}
+
+/* ─── lyrics ────────────────────────────────────
+   The sheet is pasted once, whole, exactly as it came off the web. What gets
+   attached to a bar is not a copy of some words but a **cut**: a from/to pair
+   pointing into that one text.
+
+   Three things fall out of that and none of them would from copying:
+     · the column on stage can light the exact line being sung, because the
+       bar points into the sheet rather than owning a duplicate of it;
+     · a region played twice can hold different words each time — a cut
+       simply carries which pass it belongs to;
+     · every lyric typed by hand before any of this existed still shows,
+       because a bar with no cut falls back to the string it always had.
+
+   song.lyrics = { text, cuts: [ { bar, pass, from, to } ] } */
+const lyricsOf = so => ((so || song()).lyrics) || null;
+const hasLyrics = so => { const L = lyricsOf(so); return !!(L && L.text && L.text.trim()); };
+
+function cutAt(barId, pass) {
+  const L = lyricsOf();
+  if (!L || !L.cuts) return null;
+  return L.cuts.find(c => c.bar === barId && (c.pass || 1) === (pass || 1)) || null;
+}
+/* The cue under a chord is one line. A selection that crossed a line break
+   is still one cue, so the break reads as a space here — the column highlight
+   uses the raw range and keeps the sheet's own shape. */
+function cutText(c) {
+  const L = lyricsOf();
+  return L ? L.text.slice(c.from, c.to).replace(/\s+/g, ' ').trim() : '';
+}
+/* What this bar says on this pass. A pass with nothing of its own falls back
+   to the first pass: one set of words shown twice beats a blank second time. */
+function lyricAt(bar, pass) {
+  pass = pass || 1;
+  const c = cutAt(bar.id, pass) || (pass > 1 ? cutAt(bar.id, 1) : null);
+  return c ? cutText(c) : (bar.lyric || '');
+}
+function dropCuts(barId) {
+  const L = lyricsOf();
+  if (!L || !L.cuts || !L.cuts.length) return false;
+  const n = L.cuts.length;
+  L.cuts = L.cuts.filter(c => c.bar !== barId);
+  return L.cuts.length !== n;
+}
+function cutCount() { const L = lyricsOf(); return L && L.cuts ? L.cuts.length : 0; }
+
+/* Edit the pasted sheet and every offset after the edit is wrong. The cuts
+   were made in order and consume the text in order, so they are re-found in
+   one forward pass: look for each cut's old words at or after where the last
+   one landed. A cut whose words are gone is reported, never silently dropped
+   — the bar keeps whatever it was showing. */
+function relinkCuts(oldText, newText) {
+  const L = lyricsOf();
+  if (!L || !L.cuts || !L.cuts.length) return { kept: 0, loose: 0 };
+  const byId = {};
+  song().sections.forEach(sec => sec.bars.forEach(b => { byId[b.id] = b; }));
+  const ordered = [...L.cuts].sort((a, b) => a.from - b.from);
+  const out = [];
+  let at = 0, loose = 0;
+  for (const c of ordered) {
+    const want = oldText.slice(c.from, c.to);
+    if (!want.trim()) continue;
+    const i = newText.indexOf(want, at);
+    if (i < 0) {
+      /* those words are not in the sheet any more. They are still what that
+         bar said, so they are written back as typed text rather than thrown
+         away — the bar is unlinked from the sheet, not emptied. */
+      const bar = byId[c.bar];
+      if (bar && (c.pass || 1) === 1 && !bar.lyric) bar.lyric = want.replace(/\s+/g, ' ').trim();
+      loose++;
+      continue;
+    }
+    out.push({ bar: c.bar, pass: c.pass || 1, from: i, to: i + want.length });
+    at = i + want.length;
+  }
+  L.cuts = out;
+  return { kept: out.length, loose };
+}
+
+function lyricsDialog() {
+  const d = $('#dlg-lyrics'), box = $('#lyrics-text');
+  const L = lyricsOf() || { text: '', cuts: [] };
+  box.value = L.text || '';
+  const before = L.text || '';
+  $('#lyrics-note').textContent = cutCount()
+    ? `${cutCount()} bar${cutCount() === 1 ? ' has' : 's have'} words from this sheet. Editing it keeps them where the words still appear.`
+    : 'Paste the whole sheet — copy it off the web, it does not need tidying.';
+  $('#lyrics-save').onclick = () => {
+    const s = song();
+    const after = box.value;
+    s.lyrics = s.lyrics || { text: '', cuts: [] };
+    s.lyrics.text = after;
+    let msg = 'Lyrics saved';
+    if (before && before !== after) {
+      const r = relinkCuts(before, after);
+      if (r.loose) msg = `Lyrics saved — ${r.loose} bar${r.loose === 1 ? '' : 's'} kept `
+        + `${r.loose === 1 ? 'its words' : 'their words'} as your own text`;
+    }
+    if (!after.trim()) s.lyrics.cuts = [];
+    save(); d.close(); render(); toast(msg);
+  };
+  $('#lyrics-clear').onclick = async () => {
+    if (!await ask('The pasted sheet and every word it put on a bar will be removed. Lyrics you typed by hand stay.', 'Remove')) return;
+    song().lyrics = { text: '', cuts: [] };
+    save(); d.close(); render(); toast('Lyrics removed');
+  };
+  d.querySelector('[data-close]').onclick = () => d.close();
+  d.showModal();
+}
+
+/* ─── the walk ───────────────────────────────────
+   Nothing is guessed. The sheet is on one side with a cursor on the next
+   unused word, the chart is on the other with one bar ringed, and Place puts
+   the selection on that bar and advances both. A region played twice hands
+   you its bars twice, so the second pass simply continues the walk.
+
+   No dragging: a drag on touch sits over the thing you are aiming at, which
+   is why the chart has none either. */
+const Fit = { on: false, tok: 0, len: 1, i: 0, toks: [], targets: [], stack: [] };
+
+function fitTokens(text) {
+  const out = [], re = /\S+/g;
+  let m;
+  while ((m = re.exec(text))) out.push({ from: m.index, to: m.index + m[0].length, w: m[0] });
+  return out;
+}
+/* Every bar the walk will offer, in playing order: a region marked ×2 appears
+   twice, so its second pass gets its own words. */
+function fitTargets() {
+  const out = [];
+  let no = 1;
+  song().sections.forEach(sec => {
+    const n = barCount(sec);
+    if (!n) return;
+    const rep = Math.max(1, sec.repeat || 1);
+    for (let p = 1; p <= rep; p++) {
+      let k = no;
+      sec.bars.forEach(b => {
+        out.push({ barId: b.id, pass: p, rep, sec: sec.name || 'Region', no: k, bar: b });
+        k += Math.max(1, b.span || 1);
+      });
+    }
+    no += n;
+  });
+  return out;
+}
+
+function openFit() {
+  const L = lyricsOf();
+  if (!hasLyrics()) return toast('Paste the lyrics first');
+  Fit.toks = fitTokens(L.text);
+  Fit.targets = fitTargets();
+  if (!Fit.targets.length) return toast('This song has no bars yet');
+  if (!Fit.toks.length) return toast('That sheet has no words in it');
+  /* carry on where the sheet was left: start at the first word no cut uses */
+  const used = (L.cuts || []).reduce((m, c) => Math.max(m, c.to), 0);
+  Fit.tok = Math.max(0, Fit.toks.findIndex(t => t.from >= used));
+  if (Fit.tok < 0) Fit.tok = 0;
+  Fit.len = 1;
+  Fit.i = Math.min(Fit.targets.length - 1, (L.cuts || []).length);
+  Fit.stack = [];
+  Fit.on = true;
+  $('#fit').hidden = false;
+  document.body.classList.add('fit-open');
+  paintFit();
+}
+function closeFit() {
+  Fit.on = false;
+  $('#fit').hidden = true;
+  document.body.classList.remove('fit-open');
+  save(); render();
+}
+
+function fitPlace() {
+  const t = Fit.targets[Fit.i];
+  if (!t) return;
+  const a = Fit.toks[Fit.tok], b = Fit.toks[Fit.tok + Fit.len - 1];
+  if (!a || !b) return;
+  const s = song();
+  s.lyrics = s.lyrics || { text: '', cuts: [] };
+  s.lyrics.cuts = s.lyrics.cuts || [];
+  const was = s.lyrics.cuts.filter(c => c.bar === t.barId && (c.pass || 1) === t.pass);
+  s.lyrics.cuts = s.lyrics.cuts.filter(c => !(c.bar === t.barId && (c.pass || 1) === t.pass));
+  s.lyrics.cuts.push({ bar: t.barId, pass: t.pass, from: a.from, to: b.to });
+  Fit.stack.push({ tok: Fit.tok, len: Fit.len, i: Fit.i, was });
+  Fit.tok = Math.min(Fit.toks.length - 1, Fit.tok + Fit.len);
+  Fit.len = 1;
+  Fit.i = Math.min(Fit.targets.length - 1, Fit.i + 1);
+  save(true);
+  paintFit();
+}
+function fitSkip() {
+  Fit.stack.push({ tok: Fit.tok, len: Fit.len, i: Fit.i, was: null });
+  Fit.i = Math.min(Fit.targets.length - 1, Fit.i + 1);
+  paintFit();
+}
+function fitBack() {
+  const u = Fit.stack.pop();
+  if (!u) return;
+  const s = song();
+  const t = Fit.targets[u.i];
+  if (u.was && s.lyrics) {
+    s.lyrics.cuts = s.lyrics.cuts.filter(c => !(c.bar === t.barId && (c.pass || 1) === t.pass));
+    u.was.forEach(c => s.lyrics.cuts.push(c));
+  } else if (s.lyrics && t) {
+    s.lyrics.cuts = (s.lyrics.cuts || []).filter(c => !(c.bar === t.barId && (c.pass || 1) === t.pass));
+  }
+  Fit.tok = u.tok; Fit.len = u.len; Fit.i = u.i;
+  save(true);
+  paintFit();
+}
+
+function paintFit() {
+  if (!Fit.on) return;
+  const t = Fit.targets[Fit.i];
+  const done = Fit.i >= Fit.targets.length - 1 && !!cutAt(t.barId, t.pass);
+  $('#fit-where').textContent = t
+    ? `${t.sec}${t.rep > 1 ? ` · pass ${t.pass} of ${t.rep}` : ''} · bar ${t.no}`
+    : '';
+  $('#fit-count').textContent = `${Fit.i + 1} / ${Fit.targets.length}`;
+  $('#fit-back').disabled = !Fit.stack.length;
+
+  /* the sheet */
+  const sheet = $('#fit-sheet');
+  sheet.innerHTML = '';
+  const end = Fit.tok + Fit.len;
+  Fit.toks.forEach((tk, j) => {
+    if (j) {
+      const gap = lyricsOf().text.slice(Fit.toks[j - 1].to, tk.from);
+      sheet.appendChild(document.createTextNode(gap.includes('\n') ? gap : ' '));
+    }
+    const w = el('span', 'fw' + (j < Fit.tok ? ' used' : '') + (j >= Fit.tok && j < end ? ' on' : ''), tk.w);
+    w.onclick = () => {
+      if (j < Fit.tok) { Fit.tok = j; Fit.len = 1; }
+      else Fit.len = j - Fit.tok + 1;
+      paintFit();
+    };
+    sheet.appendChild(w);
+  });
+
+  /* the chart */
+  const chart = $('#fit-chart');
+  chart.innerHTML = '';
+  let seen = null, host = null;
+  Fit.targets.forEach((x, j) => {
+    const key = x.sec + '\u0000' + x.pass;
+    if (key !== seen) {
+      seen = key;
+      const strip = el('div', 'fit-strip');
+      strip.textContent = x.sec + (x.rep > 1 ? `  ·  pass ${x.pass}` : '');
+      chart.appendChild(strip);
+      host = el('div', 'fit-row');
+      chart.appendChild(host);
+    }
+    const cell = el('button', 'fit-bar' + (j === Fit.i ? ' now' : ''));
+    cell.type = 'button';
+    cell.append(el('span', 'fit-no', String(x.no)));
+    cell.append(el('span', 'fit-ch', (x.bar.beats || []).filter(Boolean).join(' ') || '–'));
+    const c = cutAt(x.barId, x.pass);
+    cell.append(el('span', 'fit-ly', c ? cutText(c) : (x.pass === 1 && x.bar.lyric ? x.bar.lyric : '')));
+    cell.onclick = () => { Fit.i = j; paintFit(); };
+    host.appendChild(cell);
+  });
+  const now = chart.querySelector('.fit-bar.now');
+  if (now) now.scrollIntoView({ block: 'nearest' });
+  const onWord = sheet.querySelector('.fw.on');
+  if (onWord) onWord.scrollIntoView({ block: 'nearest' });
 }
 
 function linkDialog(existing) {
@@ -1171,12 +1473,21 @@ function measure(sec, it, firstInRow) {
   const tools = el('div', 'm-tools');
   acts.forEach(a => tools.appendChild(tool(a.icon, a.tip, a.run, a.danger ? 'danger' : '')));
 
-  const lyric = textBox('m-lyric', bar.lyric || '', {
+  /* What the pasted sheet put here wins over what was typed — but typing is
+     a deliberate act, so it takes the bar back off the sheet rather than
+     being overwritten on the next render. */
+  const shown = lyricAt(bar, 1);
+  const lyric = textBox('m-lyric', shown, {
     label: `Lyric or cue under bar ${no}`,
-    oninput: v => { bar.lyric = v; lyric.classList.toggle('has', !!v); save(); }
+    oninput: v => {
+      if (dropCuts(bar.id)) toast('That bar now uses what you typed');
+      bar.lyric = v; lyric.classList.toggle('has', !!v); save();
+    }
   });
-  lyric.dataset.tip = 'A lyric or short cue for this bar';
-  if (bar.lyric) lyric.classList.add('has');
+  lyric.dataset.tip = cutAt(bar.id, 1)
+    ? 'From the pasted lyric sheet — type here to use your own words instead'
+    : 'A lyric or short cue for this bar';
+  if (shown) lyric.classList.add('has');
 
   const icons = el('div', 'm-icons');
   (bar.media || []).forEach(md => icons.appendChild(mediaIcon(md, bar)));
@@ -2691,11 +3002,21 @@ function renderGig() {
     host.appendChild(gigSection(sec, barNo));
     barNo += barCount(sec);
   });
+  /* the lyric column, if this song has a sheet and the last gig left it open */
+  const lb = $('#gig-lyrics');
+  if (lb) lb.hidden = !hasLyrics();
+  Lyr.manual = null; Lyr.key = null; Lyr.passKey = null;
+  toggleLyrCol(hasLyrics() && lyrRecall());
+
   fitGigChords();
   /* a new song starts at its top, armed but not moving: the next song in a
      setlist must not scroll away while you are still counting it in */
-  if (Auto.on) { Auto.t = 0; autoResync(); Auto.paused = true; autoBuild(); }
+  if (Auto.on) { Auto.t = 0; autoResync(); Auto.paused = true; }
+  /* built either way: a tap on a bar needs the region map even when nothing
+     is scrolling */
+  autoBuild();
   paintAuto();
+  paintLyr(true);
 }
 
 /* Same idea as the editor's fitChord: "Cmaj7#11/G" must shrink to fit its bar
@@ -2713,7 +3034,17 @@ function fitGigChords() {
     const base = parseFloat(cs.fontSize);
     fitCtx.font = `${cs.fontWeight} ${base}px ${cs.fontFamily}`;
     const w = fitCtx.measureText(txt).width;
-    if (w > avail) n.style.fontSize = Math.max(11, base * avail / w).toFixed(1) + 'px';
+    /* Eleven pixels is the floor — below that a chord is not readable from a
+       music stand, so shrinking stops there. Something too long to fit even
+       at the floor used to be cut off instead, which the lyric column made
+       visible: it takes 250px off the chart, and a bar carrying a sentence
+       rather than a chord ran out of room. Let that one wrap onto a second
+       line. Clipped text is worse than a tall bar. */
+    if (w > avail) {
+      const want = base * avail / w;
+      n.style.fontSize = Math.max(11, want).toFixed(1) + 'px';
+      n.classList.toggle('wrapped', want < 11);
+    } else n.classList.remove('wrapped');
   });
 }
 
@@ -2746,6 +3077,7 @@ function gigSection(sec, startBar) {
        sailing past it. */
     box.dataset.bars = String(Math.max(1, row.used));
     box.dataset.rep  = String(Math.max(1, sec.repeat || 1));
+    box.dataset.sec  = sec.id;
     if (ri === 0) {
       const strip = el('div', 'g-strip');
       strip.append(el('span', 'g-name', sec.name || 'Region'));
@@ -2765,7 +3097,9 @@ function gigSection(sec, startBar) {
       cell.appendChild(ch);
       /* every bar gets the cue slot, empty or not, so chords across a row sit
          on the same line instead of bobbing up and down */
-      cell.appendChild(el('div', 'g-lyric', it.bar.lyric || ''));
+      cell.dataset.bar = it.bar.id;
+      cell.dataset.span = String(it.span);
+      cell.appendChild(el('div', 'g-lyric', lyricAt(it.bar, 1)));
       line.appendChild(cell);
     });
     box.appendChild(line);
@@ -2851,6 +3185,138 @@ function autoBuild() {
     t += dur;
   });
   Auto.plan = segs; Auto.total = t;
+
+  /* Which words are being sung. The rows are grouped back into their regions
+     so a repeat counts passes over the whole region: a two-row ×2 verse is
+     eight bars of pass one and then eight of pass two, which is what you
+     sing, and not what a row-by-row count would say. */
+  const regs = [];
+  boxes.forEach((n, k) => {
+    const id = n.dataset.sec || String(k);
+    let r = regs.length ? regs[regs.length - 1] : null;
+    if (!r || r.sec !== id) {
+      r = { sec: id, t0: segs[k].t0, bars: 0, rep: parseFloat(n.dataset.rep) || 1, cells: [] };
+      regs.push(r);
+    }
+    [...n.querySelectorAll('.g-bar')].forEach(cell => {
+      const span = parseFloat(cell.dataset.span) || 1;
+      r.cells.push({ id: cell.dataset.bar, at: r.bars, span, node: cell });
+      r.bars += span;
+    });
+  });
+  Auto.regions = regs;
+  Auto.barSec = barSec;
+}
+
+/* ─── the lyric column ───────────────────────────────
+   Beside the chart, opened and shut by hand, never on by itself. It costs the
+   chart 250px while it is open, which is why it is a button and not a fixture.
+
+   What lights up follows auto-scroll while auto-scroll is running. When it is
+   not — and it often is not — a tap on a bar moves it there instead, so the
+   column is never stuck whether or not the play button was pressed. */
+const Lyr = { open: false, key: null, passKey: null, manual: null };
+
+function lyrRemember(v) { try { localStorage.setItem('song-structure.lyrcol', v ? '1' : '0'); } catch (_) {} }
+function lyrRecall() { try { return localStorage.getItem('song-structure.lyrcol') === '1'; } catch (_) { return false; } }
+
+function toggleLyrCol(on) {
+  const col = $('#lyr-col');
+  if (!col) return;
+  const want = on == null ? !Lyr.open : !!on;
+  Lyr.open = want && hasLyrics();
+  col.hidden = !Lyr.open;
+  const b = $('#gig-lyrics');
+  if (b) { b.classList.toggle('on', Lyr.open); b.setAttribute('aria-expanded', String(Lyr.open)); }
+  if (on == null) lyrRemember(Lyr.open);
+  /* the chart just changed width: the chords have to be re-fitted to it, and
+     auto-scroll's whole plan is in chart coordinates that have moved */
+  fitGigChords();
+  if (Auto.on) autoBuild();
+  Lyr.key = null; Lyr.passKey = null;
+  paintLyr();
+}
+
+function lyrNow() {
+  if (!hasLyrics()) return null;
+  if (Auto.on) return gigPlace(Auto.t);
+  return Lyr.manual;
+}
+
+function paintLyr(force) {
+  if (!gigIsOn()) return;
+  const p = lyrNow();
+  const key = p ? p.barId + ':' + p.pass : '';
+  if (!force && key === Lyr.key) return;
+  Lyr.key = key;
+  markGigBar(p);
+  repaintCues(p);
+  if (Lyr.open) paintLyrCol(p);
+}
+
+function markGigBar(p) {
+  const was = $('#gig-body').querySelector('.g-bar.singing');
+  if (was) was.classList.remove('singing');
+  if (p && p.node) p.node.classList.add('singing');
+}
+
+/* The cue under a chord belongs to a pass, so it changes when the pass does.
+   Every other region is put back to its first pass, or a verse you have left
+   would sit there still showing its second time through. */
+function repaintCues(p) {
+  const pk = p ? p.sec + ':' + p.pass : '';
+  if (pk === Lyr.passKey) return;
+  Lyr.passKey = pk;
+  const byId = {};
+  song().sections.forEach(sec => sec.bars.forEach(b => { byId[b.id] = b; }));
+  (Auto.regions || []).forEach(r => {
+    const pass = (p && r.sec === p.sec) ? p.pass : 1;
+    r.cells.forEach(c => {
+      const n = c.node.querySelector('.g-lyric'), bar = byId[c.id];
+      if (n && bar) n.textContent = lyricAt(bar, pass);
+    });
+  });
+}
+
+function paintLyrCol(p) {
+  const col = $('#lyr-col');
+  if (!col || col.hidden) return;
+  const L = lyricsOf();
+  if (!L || !L.text) { col.innerHTML = ''; return; }
+  const head = el('h4', 'lyr-h', 'Lyrics');
+  const pre = el('pre', 'lyr-text');
+  const c = p ? (cutAt(p.barId, p.pass) || (p.pass > 1 ? cutAt(p.barId, 1) : null)) : null;
+  let mark = null;
+  if (c) {
+    pre.append(document.createTextNode(L.text.slice(0, c.from)));
+    mark = el('mark', 'lyr-on', L.text.slice(c.from, c.to));
+    pre.appendChild(mark);
+    pre.append(document.createTextNode(L.text.slice(c.to)));
+  } else {
+    pre.textContent = L.text;
+  }
+  col.innerHTML = '';
+  col.append(head, pre);
+  if (!c) return;
+  /* hold the sung line about a third down, the same place the chart holds the
+     bar being played */
+  const r = mark.getBoundingClientRect(), cr = col.getBoundingClientRect();
+  col.scrollTop += (r.top - cr.top) - cr.height * 0.34;
+}
+
+/* time → which bar, and which pass of it */
+function gigPlace(t) {
+  const regs = Auto.regions, bs = Auto.barSec;
+  if (!regs || !regs.length || !bs) return null;
+  let r = null;
+  for (const x of regs) { if (t < x.t0 + x.bars * bs * x.rep) { r = x; break; } }
+  if (!r) r = regs[regs.length - 1];
+  if (!r.bars || !r.cells.length) return null;
+  const inR = Math.max(0, (t - r.t0) / bs);
+  const pass = Math.min(r.rep, Math.floor(inR / r.bars) + 1);
+  const at = Math.min(r.bars - 0.0001, inR % r.bars);
+  const cell = r.cells.find(c => at >= c.at && at < c.at + c.span) || r.cells[0];
+  return { barId: cell.id, pass, node: cell.node, sec: r.sec };
 }
 function autoY(t) {
   const p = Auto.plan;
@@ -2945,6 +3411,7 @@ function autoTick(now) {
     Auto.applying = false;
     if (Auto.t >= Auto.total) { Auto.t = Auto.total; Auto.paused = true; Auto.turn = null; paintAuto(); }
     paintProgress();
+    paintLyr();                       /* a no-op until the bar actually changes */
   }
   Auto.raf = requestAnimationFrame(autoTick);
 }
@@ -3307,8 +3774,31 @@ let gigTap = null;
 $('#gig-body').addEventListener('pointerdown', e => { gigTap = { x: e.clientX, y: e.clientY, t: Date.now() }; });
 $('#gig-body').addEventListener('pointerup', e => {
   const st = gigTap; gigTap = null;
-  if (!Auto.on || !st) return;
-  if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500) autoPause();
+  if (!st) return;
+  const still = Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500;
+  if (!still) return;
+  if (Auto.on) return autoPause();
+  /* nothing is scrolling, so this tap is free: point the lyrics at the bar
+     you touched. Still read-only — it moves a highlight and nothing else. */
+  if (!hasLyrics()) return;
+  const cell = e.target.closest ? e.target.closest('.g-bar') : null;
+  if (!cell || !cell.dataset.bar) return;
+  const r = (Auto.regions || []).find(x => x.cells.some(c => c.node === cell));
+  Lyr.manual = { barId: cell.dataset.bar, pass: 1, node: cell, sec: r ? r.sec : null };
+  paintLyr(true);
+});
+$('#gig-lyrics').onclick   = () => toggleLyrCol();
+$('#fit-place').onclick    = fitPlace;
+$('#fit-skip').onclick     = fitSkip;
+$('#fit-back').onclick     = fitBack;
+$('#fit-done').onclick     = closeFit;
+/* the walk is a keyboard job on a desktop and a thumb job on the iPad */
+document.addEventListener('keydown', e => {
+  if (!Fit.on) return;
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); fitPlace(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'Backspace') { e.preventDefault(); fitBack(); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeFit(); }
+  else if (e.key === 'Tab') { e.preventDefault(); fitSkip(); }
 });
 $('#gig-bigger').onclick   = () => { gigScale += 0.12; applyGigScale(); };
 $('#gig-smaller').onclick  = () => { gigScale -= 0.12; applyGigScale(); };

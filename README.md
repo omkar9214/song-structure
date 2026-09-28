@@ -308,6 +308,34 @@ says so instead of showing an empty frame.
 Whether the panel is open is a **per-device** preference, not part of the song — folding
 it must never restamp a song and push a sync.
 
+### Lyrics
+
+Paste the whole sheet once, off the web, exactly as it comes. Then **Fit lyrics to bars**
+walks the song: the sheet on one side with a cursor on the next unused word, the chart on
+the other with one bar ringed. Tap words to extend the selection, **Place** puts them on
+that bar and moves both on, **Skip** leaves a bar blank, **Back** undoes one. Nothing is
+guessed and nothing is typed twice.
+
+What is stored on a bar is not a copy of the words but a **cut** — a from/to pair pointing
+into the one pasted text. That is what lets the column on stage light the exact line being
+sung, and it is why a region marked ×2 can hold different words each time through: a cut
+carries which pass it belongs to. The walk hands you a ×N region's bars N times.
+
+Every lyric typed by hand before any of this still shows: a bar with no cut falls back to
+the string it always had. Typing in a bar that does have one is treated as deliberate — it
+takes that bar back off the sheet rather than being overwritten on the next render.
+
+Edit the pasted sheet and the cuts are re-found in one forward pass, because they were made
+in order. A cut whose words are gone from the new sheet is **written back onto its bar as
+typed text**, never dropped — the bar is unlinked from the sheet, not emptied.
+
+On stage, **LYRICS** in the gig bar opens the sheet in a column beside the chart. It costs
+the chart 250px while it is open, which is why it is a button and not a fixture, and the
+choice is remembered per device. The line being sung lights up: it follows auto-scroll
+while auto-scroll is running, and when it is not, a tap on a bar moves it there instead.
+Repeats are counted over the whole region rather than over one row of it, so a two-row ×2
+verse is eight bars of pass one and then eight of pass two — which is what you sing.
+
 ## Sync (optional)
 
 Everything works offline with no account — the cloud is a layer on top, not a requirement.
