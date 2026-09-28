@@ -329,12 +329,22 @@ Edit the pasted sheet and the cuts are re-found in one forward pass, because the
 in order. A cut whose words are gone from the new sheet is **written back onto its bar as
 typed text**, never dropped — the bar is unlinked from the sheet, not emptied.
 
-On stage, **LYRICS** in the gig bar opens the sheet in a column beside the chart. It costs
-the chart 250px while it is open, which is why it is a button and not a fixture, and the
-choice is remembered per device. The line being sung lights up: it follows auto-scroll
-while auto-scroll is running, and when it is not, a tap on a bar moves it there instead.
-Repeats are counted over the whole region rather than over one row of it, so a two-row ×2
-verse is eight bars of pass one and then eight of pass two — which is what you sing.
+On stage, **LYRICS** in the gig bar opens a column beside the chart. It costs the chart
+250px while it is open, which is why it is a button and not a fixture, and the choice is
+remembered per device. On a phone there is no room to share, so the column covers the
+chart and you flip between them.
+
+**Nothing in that column moves.** An earlier version lit the line being sung and followed
+the playhead. That is wrong for a band playing to no click: the moment you stretch a bar,
+the chart is confidently telling you where it *thinks* you are, which is worse than saying
+nothing. So the column is a chord sheet — each bar's chord sitting on the words it lands
+on, in playing order, all of it visible at once. It is equally true whether you are ahead
+of the app or behind it.
+
+A region played more than once gets a heading per pass (“1st time”, “2nd time”), so two
+sets of words over the same bars stay told apart. Anything the walk has not reached yet is
+still printed, without chords, under “Not fitted yet” — half a fitted song must not hide
+the other half of the words.
 
 ## Sync (optional)
 

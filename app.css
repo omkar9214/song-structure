@@ -833,17 +833,30 @@ body.gig-on{overflow:hidden}
   overflow:auto;padding:12px 14px 40px;-webkit-overflow-scrolling:touch;
   overscroll-behavior:contain}
 .lyr-col[hidden]{display:none!important}
-.lyr-h{margin:0 0 8px;font-size:calc(10.5px * var(--gs));font-weight:700;letter-spacing:.12em;
+.lyr-h{margin:0 0 10px;font-size:calc(10.5px * var(--gs));font-weight:700;letter-spacing:.12em;
   text-transform:uppercase;color:var(--muted)}
-.lyr-text{margin:0;font-family:var(--font);white-space:pre-wrap;word-break:break-word;
-  font-size:calc(14px * var(--gs));line-height:1.55;color:var(--ink-2)}
-.lyr-on{background:var(--accent-soft);color:var(--ink);border-radius:4px;
-  box-shadow:0 0 0 2px var(--accent-soft)}
+/* One region's words, then the next. The heading carries which time through
+   it is when a region is played more than once. */
+.lyr-sec{display:flex;justify-content:space-between;align-items:baseline;gap:6px;
+  font-size:calc(9.5px * var(--gs));font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);margin:15px 0 5px;padding-bottom:2px;border-bottom:1px solid var(--line)}
+.lyr-sec:first-of-type{margin-top:0}
+.lyr-pass{letter-spacing:.03em;text-transform:none;font-weight:600;color:var(--accent);white-space:nowrap}
+/* Each bar is one block — chord on top, its words underneath — and the blocks
+   flow like a sentence, so the lyric still reads as a line and the chord sits
+   over the syllable it lands on. An atomic block wraps cleanly at any width,
+   which a character-aligned chord sheet does not. */
+.lyr-flow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:2px 7px}
+.lyr-pair{display:inline-flex;flex-direction:column;min-width:0}
+.lyr-ch{font-size:calc(11.5px * var(--gs));font-weight:700;color:var(--accent);
+  line-height:1.25;letter-spacing:-.01em;white-space:nowrap}
+.lyr-pair.bare .lyr-ch{visibility:hidden}
+.lyr-wd{font-size:calc(14px * var(--gs));color:var(--ink);line-height:1.35;word-break:break-word}
+.lyr-raw{margin:0;font-family:var(--font);white-space:pre-wrap;word-break:break-word;
+  font-size:calc(13px * var(--gs));line-height:1.5;color:var(--ink-2)}
+.lyr-hint{margin:0 0 9px;font-size:calc(11px * var(--gs));color:var(--muted);line-height:1.45}
 .gig-btn.gig-lyr{width:auto;padding:0 11px;font-size:11px;font-weight:700;letter-spacing:.08em}
 .gig-btn.gig-lyr[hidden]{display:none!important}
-/* the bar whose words are lit, so the chart and the column agree */
-.g-bar.singing{background:color-mix(in srgb,var(--accent) 9%,transparent)}
-.g-bar.singing .g-lyric{color:var(--ink);font-weight:600}
 
 /* the walk */
 .fit{position:fixed;inset:0;z-index:130;background:var(--bg);display:flex;flex-direction:column}
@@ -899,8 +912,16 @@ body.gig-on{overflow:hidden}
 }
 @media(max-width:560px){
   .fit-row{grid-template-columns:repeat(2,1fr)}
-  .lyr-col{width:200px}
   #fit-back,#fit-skip{padding:0 9px;font-size:12px}
+  /* A phone has no room to hold both. Squeezing the chart into 175px put its
+     chords on the 11px floor two to a row — measured, not guessed. So here the
+     column covers the chart instead of sharing with it, and you flip between
+     them. It is laid over rather than swapped in so the chart keeps its real
+     width underneath: auto-scroll's plan is in chart coordinates, and a chart
+     measured at display:none would be measured as nothing. */
+  .gig-split{position:relative}
+  .lyr-col{position:absolute;inset:0;width:auto;border-left:none;z-index:4;
+    background:var(--panel);padding-bottom:60px}
 }
 @media (hover:none),(pointer:coarse){
   /* A word is a tap target here, so the lines are set further apart than

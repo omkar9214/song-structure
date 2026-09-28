@@ -3005,18 +3005,13 @@ function renderGig() {
   /* the lyric column, if this song has a sheet and the last gig left it open */
   const lb = $('#gig-lyrics');
   if (lb) lb.hidden = !hasLyrics();
-  Lyr.manual = null; Lyr.key = null; Lyr.passKey = null;
   toggleLyrCol(hasLyrics() && lyrRecall());
 
   fitGigChords();
   /* a new song starts at its top, armed but not moving: the next song in a
      setlist must not scroll away while you are still counting it in */
-  if (Auto.on) { Auto.t = 0; autoResync(); Auto.paused = true; }
-  /* built either way: a tap on a bar needs the region map even when nothing
-     is scrolling */
-  autoBuild();
+  if (Auto.on) { Auto.t = 0; autoResync(); Auto.paused = true; autoBuild(); }
   paintAuto();
-  paintLyr(true);
 }
 
 /* Same idea as the editor's fitChord: "Cmaj7#11/G" must shrink to fit its bar
@@ -3077,7 +3072,6 @@ function gigSection(sec, startBar) {
        sailing past it. */
     box.dataset.bars = String(Math.max(1, row.used));
     box.dataset.rep  = String(Math.max(1, sec.repeat || 1));
-    box.dataset.sec  = sec.id;
     if (ri === 0) {
       const strip = el('div', 'g-strip');
       strip.append(el('span', 'g-name', sec.name || 'Region'));
@@ -3097,8 +3091,6 @@ function gigSection(sec, startBar) {
       cell.appendChild(ch);
       /* every bar gets the cue slot, empty or not, so chords across a row sit
          on the same line instead of bobbing up and down */
-      cell.dataset.bar = it.bar.id;
-      cell.dataset.span = String(it.span);
       cell.appendChild(el('div', 'g-lyric', lyricAt(it.bar, 1)));
       line.appendChild(cell);
     });
@@ -3185,37 +3177,20 @@ function autoBuild() {
     t += dur;
   });
   Auto.plan = segs; Auto.total = t;
-
-  /* Which words are being sung. The rows are grouped back into their regions
-     so a repeat counts passes over the whole region: a two-row ×2 verse is
-     eight bars of pass one and then eight of pass two, which is what you
-     sing, and not what a row-by-row count would say. */
-  const regs = [];
-  boxes.forEach((n, k) => {
-    const id = n.dataset.sec || String(k);
-    let r = regs.length ? regs[regs.length - 1] : null;
-    if (!r || r.sec !== id) {
-      r = { sec: id, t0: segs[k].t0, bars: 0, rep: parseFloat(n.dataset.rep) || 1, cells: [] };
-      regs.push(r);
-    }
-    [...n.querySelectorAll('.g-bar')].forEach(cell => {
-      const span = parseFloat(cell.dataset.span) || 1;
-      r.cells.push({ id: cell.dataset.bar, at: r.bars, span, node: cell });
-      r.bars += span;
-    });
-  });
-  Auto.regions = regs;
-  Auto.barSec = barSec;
 }
 
 /* ─── the lyric column ───────────────────────────────
-   Beside the chart, opened and shut by hand, never on by itself. It costs the
-   chart 250px while it is open, which is why it is a button and not a fixture.
+   Beside the chart, opened and shut by hand. It costs the chart 250px while
+   it is open, which is why it is a button and not a fixture.
 
-   What lights up follows auto-scroll while auto-scroll is running. When it is
-   not — and it often is not — a tap on a bar moves it there instead, so the
-   column is never stuck whether or not the play button was pressed. */
-const Lyr = { open: false, key: null, passKey: null, manual: null };
+   Nothing in here moves. An earlier version lit the line being sung and
+   followed the playhead, which is wrong for a band playing to no click: the
+   moment you stretch a bar, the chart is telling you confidently where it
+   thinks you are, and that is worse than saying nothing at all. So the column
+   is a chord sheet — every bar's chord sitting on the words it lands on, all
+   of it visible at once, equally true whether you are ahead of the app or
+   behind it. */
+const Lyr = { open: false };
 
 function lyrRemember(v) { try { localStorage.setItem('song-structure.lyrcol', v ? '1' : '0'); } catch (_) {} }
 function lyrRecall() { try { return localStorage.getItem('song-structure.lyrcol') === '1'; } catch (_) { return false; } }
@@ -3229,95 +3204,73 @@ function toggleLyrCol(on) {
   const b = $('#gig-lyrics');
   if (b) { b.classList.toggle('on', Lyr.open); b.setAttribute('aria-expanded', String(Lyr.open)); }
   if (on == null) lyrRemember(Lyr.open);
+  paintLyrCol();
   /* the chart just changed width: the chords have to be re-fitted to it, and
-     auto-scroll's whole plan is in chart coordinates that have moved */
+     auto-scroll's plan is in chart coordinates that have moved */
   fitGigChords();
   if (Auto.on) autoBuild();
-  Lyr.key = null; Lyr.passKey = null;
-  paintLyr();
 }
 
-function lyrNow() {
-  if (!hasLyrics()) return null;
-  if (Auto.on) return gigPlace(Auto.t);
-  return Lyr.manual;
-}
+const ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+const ordinal = n => ORD[n] || (n + 'th');
+const chordOf = bar => (bar.beats || []).filter(Boolean).join(' ');
 
-function paintLyr(force) {
-  if (!gigIsOn()) return;
-  const p = lyrNow();
-  const key = p ? p.barId + ':' + p.pass : '';
-  if (!force && key === Lyr.key) return;
-  Lyr.key = key;
-  markGigBar(p);
-  repaintCues(p);
-  if (Lyr.open) paintLyrCol(p);
-}
-
-function markGigBar(p) {
-  const was = $('#gig-body').querySelector('.g-bar.singing');
-  if (was) was.classList.remove('singing');
-  if (p && p.node) p.node.classList.add('singing');
-}
-
-/* The cue under a chord belongs to a pass, so it changes when the pass does.
-   Every other region is put back to its first pass, or a verse you have left
-   would sit there still showing its second time through. */
-function repaintCues(p) {
-  const pk = p ? p.sec + ':' + p.pass : '';
-  if (pk === Lyr.passKey) return;
-  Lyr.passKey = pk;
-  const byId = {};
-  song().sections.forEach(sec => sec.bars.forEach(b => { byId[b.id] = b; }));
-  (Auto.regions || []).forEach(r => {
-    const pass = (p && r.sec === p.sec) ? p.pass : 1;
-    r.cells.forEach(c => {
-      const n = c.node.querySelector('.g-lyric'), bar = byId[c.id];
-      if (n && bar) n.textContent = lyricAt(bar, pass);
-    });
-  });
-}
-
-function paintLyrCol(p) {
+function paintLyrCol() {
   const col = $('#lyr-col');
   if (!col || col.hidden) return;
-  const L = lyricsOf();
-  if (!L || !L.text) { col.innerHTML = ''; return; }
-  const head = el('h4', 'lyr-h', 'Lyrics');
-  const pre = el('pre', 'lyr-text');
-  const c = p ? (cutAt(p.barId, p.pass) || (p.pass > 1 ? cutAt(p.barId, 1) : null)) : null;
-  let mark = null;
-  if (c) {
-    pre.append(document.createTextNode(L.text.slice(0, c.from)));
-    mark = el('mark', 'lyr-on', L.text.slice(c.from, c.to));
-    pre.appendChild(mark);
-    pre.append(document.createTextNode(L.text.slice(c.to)));
-  } else {
-    pre.textContent = L.text;
-  }
   col.innerHTML = '';
-  col.append(head, pre);
-  if (!c) return;
-  /* hold the sung line about a third down, the same place the chart holds the
-     bar being played */
-  const r = mark.getBoundingClientRect(), cr = col.getBoundingClientRect();
-  col.scrollTop += (r.top - cr.top) - cr.height * 0.34;
+  const L = lyricsOf();
+  if (!L || !L.text.trim()) return;
+  col.appendChild(el('h4', 'lyr-h', 'Lyrics'));
+
+  const cuts = L.cuts || [];
+  if (!cuts.length) {
+    col.appendChild(el('p', 'lyr-hint',
+      'Fit the lyrics to the bars and each chord appears over the words it lands on.'));
+    col.appendChild(el('pre', 'lyr-raw', L.text));
+    return;
+  }
+
+  /* In playing order, because that is the order it is read in. A region
+     played twice gets a heading per pass, so two sets of words over the same
+     bars stay told apart. */
+  song().sections.forEach(sec => {
+    if (!barCount(sec)) return;
+    const rep = Math.max(1, sec.repeat || 1);
+    for (let p = 1; p <= rep; p++) {
+      const pairs = [];
+      sec.bars.forEach(b => {
+        const c = cutAt(b.id, p);
+        const words = c ? cutText(c) : (p === 1 ? (b.lyric || '') : '');
+        if (words) pairs.push({ ch: chordOf(b), w: words });
+      });
+      if (!pairs.length) continue;
+      const head = el('div', 'lyr-sec');
+      head.appendChild(el('span', null, sec.name || 'Region'));
+      if (rep > 1) head.appendChild(el('span', 'lyr-pass', ordinal(p) + ' time'));
+      col.appendChild(head);
+      const flow = el('div', 'lyr-flow');
+      pairs.forEach(x => {
+        const pair = el('span', 'lyr-pair' + (x.ch ? '' : ' bare'));
+        pair.append(el('span', 'lyr-ch', x.ch || '·'), el('span', 'lyr-wd', x.w));
+        flow.appendChild(pair);
+      });
+      col.appendChild(flow);
+    }
+  });
+
+  /* Whatever the walk has not reached yet is still shown, with no chords over
+     it. Half a fitted song must not hide the other half of the words. */
+  const end = cuts.reduce((m, c) => Math.max(m, c.to), 0);
+  const rest = L.text.slice(end).trim();
+  if (rest) {
+    const head = el('div', 'lyr-sec');
+    head.appendChild(el('span', null, 'Not fitted yet'));
+    col.appendChild(head);
+    col.appendChild(el('pre', 'lyr-raw', rest));
+  }
 }
 
-/* time → which bar, and which pass of it */
-function gigPlace(t) {
-  const regs = Auto.regions, bs = Auto.barSec;
-  if (!regs || !regs.length || !bs) return null;
-  let r = null;
-  for (const x of regs) { if (t < x.t0 + x.bars * bs * x.rep) { r = x; break; } }
-  if (!r) r = regs[regs.length - 1];
-  if (!r.bars || !r.cells.length) return null;
-  const inR = Math.max(0, (t - r.t0) / bs);
-  const pass = Math.min(r.rep, Math.floor(inR / r.bars) + 1);
-  const at = Math.min(r.bars - 0.0001, inR % r.bars);
-  const cell = r.cells.find(c => at >= c.at && at < c.at + c.span) || r.cells[0];
-  return { barId: cell.id, pass, node: cell.node, sec: r.sec };
-}
 function autoY(t) {
   const p = Auto.plan;
   if (!p || !p.length) return 0;
@@ -3411,7 +3364,6 @@ function autoTick(now) {
     Auto.applying = false;
     if (Auto.t >= Auto.total) { Auto.t = Auto.total; Auto.paused = true; Auto.turn = null; paintAuto(); }
     paintProgress();
-    paintLyr();                       /* a no-op until the bar actually changes */
   }
   Auto.raf = requestAnimationFrame(autoTick);
 }
@@ -3774,18 +3726,8 @@ let gigTap = null;
 $('#gig-body').addEventListener('pointerdown', e => { gigTap = { x: e.clientX, y: e.clientY, t: Date.now() }; });
 $('#gig-body').addEventListener('pointerup', e => {
   const st = gigTap; gigTap = null;
-  if (!st) return;
-  const still = Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500;
-  if (!still) return;
-  if (Auto.on) return autoPause();
-  /* nothing is scrolling, so this tap is free: point the lyrics at the bar
-     you touched. Still read-only — it moves a highlight and nothing else. */
-  if (!hasLyrics()) return;
-  const cell = e.target.closest ? e.target.closest('.g-bar') : null;
-  if (!cell || !cell.dataset.bar) return;
-  const r = (Auto.regions || []).find(x => x.cells.some(c => c.node === cell));
-  Lyr.manual = { barId: cell.dataset.bar, pass: 1, node: cell, sec: r ? r.sec : null };
-  paintLyr(true);
+  if (!Auto.on || !st) return;
+  if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500) autoPause();
 });
 $('#gig-lyrics').onclick   = () => toggleLyrCol();
 $('#fit-place').onclick    = fitPlace;
