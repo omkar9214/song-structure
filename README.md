@@ -127,15 +127,21 @@ signature says and keyframe stops cannot be a CSS variable.
 
 At phone width the gig bar is already exactly full, so there the pulse wraps onto its own
 line under it rather than squeezing the song title away. The jump menu hangs off the bar's
-measured height for that reason, not a fixed 56px — and the bar's height is not fixed: a
-title too long for one line takes a second one.
+measured height for that reason, not a fixed 56px.
 
 The title and the setlist position used to be two controls side by side, and between them
 they left the title 165px on an iPad in portrait — with SCORE and LYRICS both present, a
 long title was simply cut off. They are one control now: the title carries the position in
-its own text flow, so it wraps with the last word, and the whole thing is the button that
-opens the running order. Below 820px the title has a floor of 160px that nothing may push
-it under; whatever else has to wrap to a second row, wraps.
+its own text flow — *At Last  2/20* — and the whole thing is the button that opens the
+running order.
+
+**Nothing else in that bar ever moves.** Every button is in the same place on every song,
+because that is the row he reaches for mid-song without looking: SCORE and LYRICS are
+dimmed rather than removed when a song has neither, the artist line keeps its height
+whether or not there is an artist, and the title sits in a fixed 20px box. A title too
+long for the space shrinks to fit rather than wrapping — down to 12px, below which it
+would not be readable from a mic stand and the ellipsis is the honest answer. The title
+is the only thing in the bar allowed to give.
 
 **Tap** beside it plays the tempo in rather than typing a number you guessed. Tap along
 four times or more and the BPM follows you; the pulse re-phases on every tap, so the

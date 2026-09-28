@@ -1350,7 +1350,10 @@ function markerLane(sec, row) {
     const m = el('button', 'marker');
     m.type = 'button';
     m.dataset.tip = `${c.text} — bar ${c.bar} of this region. Click to edit, \u2325-click to remove.`;
-    m.append(c.icon || '\ud83d\udccc', el('span', null, c.text));
+    /* no icon is a real choice and the default: a cue that says "STOP" does
+       not need a pin in front of it. */
+    if (c.icon) m.append(c.icon);
+    m.append(el('span', null, c.text));
     m.onclick = e => {
       if (e.altKey) { sec.cues.splice(sec.cues.indexOf(c), 1); save(); render(); }
       else cueDialog(sec, c);
@@ -2184,7 +2187,7 @@ function sectionDialog() {
 function cueDialog(sec, existing, atBar) {
   const d = $('#dlg-cue');
   $('#cue-text').value = existing ? existing.text : '';
-  $('#cue-icon').value = existing ? existing.icon : '\ud83c\udfa4';
+  $('#cue-icon').value = existing ? (existing.icon || '') : '';
   $('#cue-bar').value  = existing ? existing.bar : Math.max(1, atBar || 1);
   $('#cue-bar').max = barCount(sec) || 1;
   $('#cue-delete').hidden = !existing;
@@ -3296,10 +3299,25 @@ function renderGig() {
     closeJump();
   }
 
+  /* SCORE, LYRICS and the lyric column belong to the song on screen, and they
+     are set before anything that can return early. They used to be set at the
+     foot of this function, below the `no regions yet` return — so a song with
+     no regions kept the *previous* song's buttons, and SCORE offered a score
+     that belonged to another song. */
+  /* Dimmed, not removed. A button that comes and goes with the song slides
+     every button to its right along with it, and the whole cluster is
+     reached for mid-song without looking. They stay where they are. */
+  const lb = $('#gig-lyrics');
+  if (lb) { lb.hidden = false; lb.disabled = !hasLyrics(s); }
+  const sb = $('#gig-score');
+  if (sb) { sb.hidden = false; sb.disabled = !scoresOf(s).length; }
+  toggleLyrCol(hasLyrics(s) && lyrRecall());
+
   const host = $('#gig-body');
   host.innerHTML = '';
   if (!s.sections.length) {
     host.appendChild(el('p', 'gig-empty', 'This song has no regions yet.'));
+    fitGigTitle();
     return;
   }
   let barNo = 1;
@@ -3315,18 +3333,29 @@ function renderGig() {
     host.appendChild(gigSection(sec, barNo));
     barNo += barCount(sec);
   });
-  /* the lyric column, if this song has a sheet and the last gig left it open */
-  const lb = $('#gig-lyrics');
-  if (lb) lb.hidden = !hasLyrics();
-  const sb = $('#gig-score');
-  if (sb) sb.hidden = !scoresOf().length;
-  toggleLyrCol(hasLyrics() && lyrRecall());
-
   fitGigChords();
+  fitGigTitle();
   /* a new song starts at its top, armed but not moving: the next song in a
      setlist must not scroll away while you are still counting it in */
   if (Auto.on) { Auto.t = 0; autoResync(); Auto.paused = true; autoBuild(); }
   paintAuto();
+}
+
+/* The same bargain the chords make, for the song title. Wrapping it to a
+   second line would change the height of the bar between songs, which moves
+   every button in it — and the buttons are what he reaches for mid-song
+   without looking. So the title shrinks instead, down to 12px; below that it
+   is not readable from a mic stand anyway and the ellipsis is the honest
+   answer. Everything else in the bar stays exactly where it was. */
+function fitGigTitle() {
+  const top = document.querySelector('.gh-top'), b = $('#gig-name');
+  if (!top || !b) return;
+  b.style.fontSize = '';
+  let fs = parseFloat(getComputedStyle(b).fontSize) || 16;
+  while (top.scrollWidth > top.clientWidth + 1 && fs > 12) {
+    fs -= 0.5;
+    b.style.fontSize = fs + 'px';
+  }
 }
 
 /* Same idea as the editor's fitChord: "Cmaj7#11/G" must shrink to fit its bar
@@ -3372,7 +3401,8 @@ function gigSection(sec, startBar) {
         const abs = base + c.bar - 1;
         const item = row.items.find(it => abs >= it.no && abs < it.no + it.span) || row.items[0];
         const tag = el('span', 'g-cue');
-        tag.append(c.icon || '📌', el('span', null, c.text));
+        if (c.icon) tag.append(c.icon);
+        tag.append(el('span', null, c.text));
         tag.style.gridColumn = `${item.col + 1} / span ${Math.max(1, item.span)}`;
         lane.appendChild(tag);
       });
@@ -4257,7 +4287,17 @@ $('#gig-body').addEventListener('pointerup', e => {
   if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 12 && Date.now() - st.t < 500) autoPause();
 });
 $('#gig-lyrics').onclick   = () => toggleLyrCol();
-$('#gig-score').onclick    = () => { const m = scoresOf()[0]; if (m) openScore(m); };
+/* scoresOf() with no argument goes through song(), which falls back to the
+   first song in the library when currentId matches nothing — that is how a
+   stale button could open a score belonging to somebody else's song. Ask the
+   song by id, and say so plainly when there is nothing to open. */
+$('#gig-score').onclick    = () => {
+  const s = songById(state.currentId);
+  const m = s && scoresOf(s)[0];
+  if (m) return openScore(m);
+  $('#gig-score').disabled = true;
+  toast('This song has no score attached.');
+};
 $('#score-close').onclick  = closeScore;
 $('#resf-import').onchange = e => { if (e.target.files.length) folderImport(e.target.files); e.target.value = ''; };
 /* pick the folder up at boot so the first attachment of the session is mirrored
@@ -4431,6 +4471,7 @@ if (window.ResizeObserver) {
 window.addEventListener('resize', () => {
   if (!gigIsOn()) return;
   fitGigChords();
+  fitGigTitle();          /* the strip is a different width in the other orientation */
   if (Auto.on) autoBuild();
 });
 
