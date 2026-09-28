@@ -316,6 +316,9 @@ the other with one bar ringed. Tap words to extend the selection, **Place** puts
 that bar and moves both on, **Skip** leaves a bar blank, **Back** undoes one. Nothing is
 guessed and nothing is typed twice.
 
+Words already used are **underlined, not greyed out** — a region marked ×2 needs the same
+words a second time, so tapping one takes the cursor back to it and hands it out again.
+
 What is stored on a bar is not a copy of the words but a **cut** — a from/to pair pointing
 into the one pasted text. That is what lets the column on stage light the exact line being
 sung, and it is why a region marked ×2 can hold different words each time through: a cut
@@ -347,6 +350,13 @@ A region played more than once gets a heading per pass (“1st time”, “2nd t
 sets of words over the same bars stay told apart. Anything the walk has not reached yet is
 still printed, without chords, under “Not fitted yet” — half a fitted song must not hide
 the other half of the words.
+
+### Cues
+
+A cue is a pointer above the bars — “vocal starts”, “sustain”, “everyone out”. It is added
+from the **block** it belongs to, which already knows its own bar number, rather than from
+the region menu where you had to name that number by hand. The slot under a chord now
+carries lyrics, so the cue lane above is where the rest of the marks go.
 
 ## Sync (optional)
 

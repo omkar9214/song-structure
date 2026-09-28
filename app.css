@@ -108,6 +108,10 @@ button{cursor:pointer;touch-action:manipulation}
   text-transform:uppercase;color:var(--muted);background:var(--panel);border:1px solid var(--line);
   border-radius:8px;padding:4px 8px 4px 10px;transition:border-color var(--t)}
 .meta:hover{border-color:var(--line-strong)}
+/* Every pill in this row is the same height. The others are sized by the
+   field inside them; the pulse holds only a word and some dots, so without
+   this it sits visibly shorter than the ones either side of it. */
+.meta{min-height:34px}
 .meta input,.meta select,.meta .key-in{width:58px;border:none;background:transparent;padding:2px 0;font-size:13.5px;
   font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink);outline:none}
 .meta select{width:auto;cursor:pointer}
@@ -582,7 +586,8 @@ body.gig-on{overflow:hidden}
 
 /* ── touch: hover-only controls must stay reachable ─────── */
 @media (hover:none),(pointer:coarse){
-  .tap-btn{min-height:40px}                  /* a target you hit in time, not a label */
+  .meta{min-height:44px}                     /* and they stay level with each other */
+  .tap-btn{min-height:44px}                  /* a target you hit in time, not a label */
   /* No hover on touch — and Safari fires :hover on a tap, which used to throw
      the whole tool row over the block the moment you tried to type in it.
      Nothing opens by itself here: the ⋯ opens it, a tap anywhere closes it. */
@@ -909,7 +914,8 @@ body.lyr-open{padding-right:300px}
 .fw{border-radius:5px;padding:2px 3px;margin:0 -1px;cursor:pointer;
   transition:background var(--t),color var(--t)}
 .fw:hover{background:var(--sunk);color:var(--ink-2)}
-.fw.used{color:var(--line-strong)}
+.fw.used{color:var(--ink-2);text-decoration:underline;text-decoration-color:var(--accent);
+  text-decoration-thickness:1.5px;text-underline-offset:3px}
 .fw.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
 .fit-chart{width:340px;flex:none;overflow:auto;padding:14px 14px 40px;background:var(--sunk);
   -webkit-overflow-scrolling:touch}

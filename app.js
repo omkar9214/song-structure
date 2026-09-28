@@ -1358,9 +1358,7 @@ function regionStrip(sec, idx) {
     (sec.media || []).forEach(m => right.appendChild(mediaIcon(m, sec)));
     const acts = [
       { icon: 'repeat', label: 'Repeat count',        tip: 'Set repeat count — how many times this region is played', run: () => setRepeat(sec) },
-      { icon: 'pin',    label: 'Add a pointer / cue', tip: 'Add a pointer above the bars (vocal starts, drums enter…)', run: () => cueDialog(sec) },
       { icon: 'clip',   label: 'Attach a clip or file', tip: 'Attach a clip of the song, or a file, to this region', run: () => attachTo(sec, `the ${sec.name || 'region'} region`) },
-      { icon: 'plus',   label: 'Add one more bar',    tip: 'Add one more bar to this region', run: () => { sec.bars.push(newBar()); save(); render(); } },
       { icon: 'paint',  label: 'Change the colour',   tip: 'Change the region colour', run: () => { sec.color = COLORS[(COLORS.indexOf(sec.color) + 1) % COLORS.length]; save(); render(); } },
       { icon: 'up',     label: 'Move region earlier', tip: 'Move this region earlier in the song', run: () => moveSection(idx, -1) },
       { icon: 'down',   label: 'Move region later',   tip: 'Move this region later in the song', run: () => moveSection(idx, 1) },
@@ -1465,6 +1463,13 @@ function measure(sec, it, firstInRow) {
       focusBar(copy.id);                     /* carry on typing in the copy, where you were */
     } },
     { icon: 'clip', label: 'Attach a clip or file', tip: 'Attach a clip of the song, or a file, to this block', run: () => attachTo(bar, name) },
+    /* Cues used to be addable only from the region menu, which meant naming
+       the bar number by hand after opening it. The block knows its own
+       number — now that the slot under the chord holds lyrics, this is the
+       lane that "sustain" and the rest have to move to. */
+    { icon: 'pin', label: 'Add a cue above this block',
+      tip: 'Add a cue above this block — sustain, vocal starts, drums enter…',
+      run: () => cueDialog(sec, null, cueOffset(sec, i) + 1) },
     { icon: 'trash', label: span > 1 ? 'Delete this block' : 'Delete this bar', tip: span > 1 ? 'Delete this block' : 'Delete this bar',
       danger: true, run: async () => {
         const written = bar.beats.some(Boolean) || bar.lyric || (bar.media || []).length;
@@ -2114,11 +2119,14 @@ function sectionDialog() {
   $('#sec-name').select();
   setTimeout(() => $('#sec-name').select(), 30);
 }
-function cueDialog(sec, existing) {
+/* `atBar` is the block it was opened from, 1-based in bars of time within the
+   region — the same units cue.bar is stored in. Opened from the region menu
+   there is no block to ask, so it falls back to the first bar. */
+function cueDialog(sec, existing, atBar) {
   const d = $('#dlg-cue');
   $('#cue-text').value = existing ? existing.text : '';
   $('#cue-icon').value = existing ? existing.icon : '\ud83c\udfa4';
-  $('#cue-bar').value  = existing ? existing.bar : 1;
+  $('#cue-bar').value  = existing ? existing.bar : Math.max(1, atBar || 1);
   $('#cue-bar').max = barCount(sec) || 1;
   $('#cue-delete').hidden = !existing;
 
@@ -3307,7 +3315,7 @@ function paintLyrPanel() {
   body.innerHTML = '';
   const has = hasLyrics();
   $('#lyr-panel-fit').hidden = !has;
-  $('#lyr-panel-edit').textContent = has ? 'Sheet' : 'Paste';
+  $('#lyr-panel-edit').textContent = has ? 'Edit' : 'Paste';
   if (!has) {
     body.appendChild(el('p', 'lyr-hint',
       'Nothing pasted yet. Copy the lyric sheet off the web, paste it in whole, then fit '
