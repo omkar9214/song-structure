@@ -60,7 +60,7 @@ setTimeout(() => { if (discardDraft()) { writeLocal(); render({ top: true }); } 
 
 function blankSong() {
   return { id: uid('s'), title: '', artist: '', key: '', bpm: BLANK_BPM, time: BLANK_TIME,
-           sections: [], media: [], updated: Date.now() };
+           sections: [], media: [], links: [], updated: Date.now() };
 }
 function load() {
   try {
@@ -185,6 +185,7 @@ function songIsBlank(so) {
   if (String(so.note   || '').trim()) return false;
   if ((so.sections || []).length) return false;
   if ((so.media || []).length) return false;
+  if ((so.links || []).length) return false;
   if (so.track) return false;
   /* a tempo or a time signature that is not the default is something written */
   if (so.bpm != null && String(so.bpm) !== String(BLANK_BPM)) return false;
@@ -471,6 +472,7 @@ function paint() {
   document.title = s.title ? `${s.title} — Song Structure` : 'Song Structure';
 
   renderTrack();
+  renderResources();
   renderRoadmap();
 
   const host = $('#sections');
@@ -570,6 +572,237 @@ function renderTrack() {
 
   row.append(name, meta, player, warn, clip, del);
   host.appendChild(row);
+}
+
+/* ─── resources ──────────────────────────────────
+   Everything about this song that is not the chart. The mp3 row above is
+   untouched; this folds out from under it.
+
+   A link is text. It rides in the song row, so it syncs and backs up with
+   no upload and costs nothing in the offline audit — and it is worthless
+   without signal, which is why nothing here appears in gig mode and why
+   the panel says so in as many words. */
+
+/* Services whose player a page can actually hold. `embed` builds the src
+   from what the pasted URL already contains: no network call, so pasting
+   works offline even though playing will not. */
+const PROVIDERS = [
+  { id: 'youtube', name: 'YouTube',
+    test: /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{6,})/i,
+    embed: m => `https://www.youtube.com/embed/${m[1]}`, ratio: '16/9' },
+  { id: 'spotify', name: 'Spotify',
+    test: /open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]+)/i,
+    embed: m => `https://open.spotify.com/embed/${m[1].toLowerCase()}/${m[2]}`,
+    height: m => /track|episode/i.test(m[1]) ? 152 : 380,
+    note: 'Spotify gives you 30 seconds unless this browser is signed in to Spotify.' },
+  { id: 'apple', name: 'Apple Music',
+    test: /music\.apple\.com\/(.+)$/i,
+    embed: m => `https://embed.music.apple.com/${m[1]}`, height: () => 175,
+    note: 'Apple Music plays a preview unless this browser is signed in.' },
+  { id: 'tidal', name: 'TIDAL',
+    test: /tidal\.com\/(?:browse\/)?(track|album|video|playlist)\/([\w-]+)/i,
+    embed: m => `https://embed.tidal.com/${m[1]}s/${m[2]}`, height: () => 180 },
+  { id: 'soundcloud', name: 'SoundCloud',
+    test: /soundcloud\.com\/[\w-]+\/[\w-]+/i,
+    embed: (m, url) => `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&visual=false`,
+    height: () => 166 }
+];
+/* And the ones that publish no player a public URL can be turned into.
+   Amazon Music has no embed at all; Bandcamp's wants a numeric album id
+   the page never shows. These open out of the app rather than pretending. */
+const OUTBOUND = [
+  { id: 'amazon',   name: 'Amazon Music', test: /music\.amazon\./i },
+  { id: 'bandcamp', name: 'Bandcamp',     test: /bandcamp\.com/i },
+  { id: 'deezer',   name: 'Deezer',       test: /deezer\.com/i }
+];
+
+function readLink(url) {
+  const u = String(url || '').trim();
+  for (const p of OUTBOUND) if (p.test.test(u)) return { provider: p.id, name: p.name, embed: null };
+  for (const p of PROVIDERS) {
+    const m = u.match(p.test);
+    if (!m) continue;
+    return { provider: p.id, name: p.name, embed: p.embed(m, u),
+             ratio: p.ratio || '', height: p.height ? p.height(m) : 0, note: p.note || '' };
+  }
+  let host = '';
+  try { host = new URL(/^https?:\/\//i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, ''); }
+  catch (_) {}
+  return { provider: 'web', name: host || 'Link', embed: null };
+}
+
+/* Open or shut is a per-device preference, not a property of the song:
+   folding a panel must never restamp a song and push a sync. saveLocal()
+   writes to this device and tells the cloud nothing. */
+function renderResources() {
+  const host = $('#res-bar');
+  if (!host) return;
+  host.innerHTML = '';
+  const s = song();
+  const links = s.links || [];
+  const open = !!state.resOpen;
+
+  const head = el('button', 'res-toggle');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', String(open));
+  head.append(icon(open ? 'up' : 'down', 14), el('span', null, 'Resources'));
+  if (links.length) head.append(el('span', 'res-count', String(links.length)));
+  head.dataset.tip = 'Links to recordings and videos of this song';
+  head.onclick = () => { state.resOpen = !open; saveLocal(); renderResources(); };
+  host.appendChild(head);
+  if (!open) return;
+
+  const panel = el('div', 'res-panel');
+  const g = el('div', 'res-group');
+  g.appendChild(el('h3', 'res-h', 'Links'));
+
+  const chips = el('div', 'res-chips');
+  links.forEach(l => chips.appendChild(linkChip(l)));
+  const add = el('button', 'res-add');
+  add.type = 'button';
+  add.append(icon('plus', 13), el('span', null, links.length ? 'Add another' : 'Add a link'));
+  add.dataset.tip = 'Paste a link to a video or a recording of this song';
+  add.onclick = () => linkDialog(null);
+  chips.appendChild(add);
+  g.appendChild(chips);
+
+  g.appendChild(el('p', 'res-hint',
+    'A video or a recording — YouTube, Spotify, Apple Music, TIDAL, SoundCloud play '
+    + 'inside the app; Amazon Music and Bandcamp open outside it. Every link needs signal, '
+    + 'so none of them are on the gig screen.'));
+  panel.appendChild(g);
+  host.appendChild(panel);
+}
+
+function linkChip(l) {
+  const wrap = el('span', 'res-chip');
+  const go = el('button', 'res-go');
+  go.type = 'button';
+  const info = readLink(l.url);
+  go.append(icon(info.provider === 'youtube' ? 'video' : 'link', 13),
+            el('span', null, l.title || info.name || l.url));
+  go.dataset.tip = (info.embed ? 'Play ' : 'Open ') + (l.title || l.url);
+  go.setAttribute('aria-label', go.dataset.tip);
+  go.onclick = () => openLink(l);
+
+  const kill = el('button', 'res-kill');
+  kill.type = 'button';
+  kill.appendChild(icon('x', 12));
+  kill.dataset.tip = `Remove ${l.title || 'this link'}`;
+  kill.setAttribute('aria-label', kill.dataset.tip);
+  kill.onclick = async e => {
+    e.stopPropagation();
+    if (!await ask(`${l.title || 'This link'} will be removed from this song.`, 'Remove')) return;
+    removeLink(l);
+  };
+  wrap.append(go, kill);
+  return wrap;
+}
+
+function removeLink(l) {
+  const a = song().links || [];
+  const i = a.findIndex(x => x.id === l.id);
+  if (i < 0) return;
+  a.splice(i, 1);
+  save(); render();
+}
+
+function openLink(l) {
+  const info = readLink(l.url);
+  const body = $('#viewer-body');
+  Sound.stopIn(body);
+  body.innerHTML = '';
+  $('#viewer-name').textContent = l.title || info.name;
+
+  if (!navigator.onLine) {
+    body.appendChild(el('p', 'res-note',
+      'This is a link, and there is no signal. Links are the one thing here that needs '
+      + 'the internet — the chart, the mp3 and anything attached do not.'));
+  } else if (info.embed) {
+    const f = el('iframe', 'res-embed');
+    f.src = info.embed;
+    f.title = l.title || info.name;
+    f.allow = 'autoplay; encrypted-media; clipboard-write; picture-in-picture';
+    f.setAttribute('allowfullscreen', '');
+    f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    if (info.height) f.style.height = info.height + 'px';
+    else { f.style.aspectRatio = info.ratio || '16/9'; f.style.height = 'auto'; }
+    body.appendChild(f);
+    if (info.note) body.appendChild(el('p', 'res-note', info.note));
+  } else {
+    body.appendChild(el('p', 'res-note',
+      `${info.name} publishes no player a page can hold, so this one opens in `
+      + `${info.name} itself.`));
+  }
+
+  const row = el('div', 'trim-tools');
+  const out = el('a', 'btn', info.embed ? `Open in ${info.name}` : `Open ${info.name}`);
+  out.href = l.url; out.target = '_blank'; out.rel = 'noopener noreferrer';
+  const ren = el('button', 'btn ghost', 'Rename');
+  ren.type = 'button';
+  ren.onclick = () => { closeViewer(); linkDialog(l); };
+  row.append(out, ren);
+  body.appendChild(row);
+
+  const rm = $('#viewer-remove');
+  rm.onclick = async () => {
+    if (!await ask(`${l.title || 'This link'} will be removed from this song.`, 'Remove')) return;
+    removeLink(l); closeViewer();
+  };
+  $('#viewer').hidden = false;
+}
+
+function linkDialog(existing) {
+  const d = $('#dlg-link'), url = $('#link-url'), name = $('#link-name'), who = $('#link-who');
+  $('#link-h').textContent = existing ? 'Edit link' : 'Add a link';
+  $('#link-save').textContent = existing ? 'Save' : 'Add link';
+  url.value  = existing ? existing.url : '';
+  name.value = existing ? (existing.title || '') : '';
+
+  /* Say what will happen before it happens: which service this is, whether
+     it will play here or leave the app, and what the service will hand you. */
+  const paint = () => {
+    const v = url.value.trim();
+    if (!v) {
+      who.className = 'dlg-note';
+      who.textContent = 'Paste a link to a video or a recording of this song.';
+      return;
+    }
+    const info = readLink(v);
+    who.className = 'dlg-note' + (info.embed ? ' res-ok' : '');
+    who.textContent = info.embed
+      ? `${info.name} — plays inside the app.${info.note ? ' ' + info.note : ''}`
+      : `${info.name} — opens outside the app.`;
+  };
+  url.oninput = paint;
+  paint();
+
+  $('#link-save').onclick = () => {
+    let v = url.value.trim();
+    if (!v) return toast('Paste a link first');
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    /* 'notaurl' parses happily as a host, so a bare word would become a
+       link to nowhere. A real host has a dot in it. */
+    try {
+      if (!new URL(v).hostname.includes('.')) throw 0;
+    } catch (_) { return toast('That is not a link'); }
+    const info = readLink(v);
+    const title = name.value.trim();
+    const s = song();
+    s.links = s.links || [];
+    if (existing) {
+      existing.url = v;
+      existing.title = title || existing.title || info.name;
+      existing.provider = info.provider;
+    } else {
+      s.links.push({ id: uid('l'), url: v, title: title || info.name,
+                     provider: info.provider, addedAt: Date.now() });
+    }
+    save(); d.close(); render();
+    toast(existing ? 'Link saved' : 'Link added');
+  };
+  d.querySelector('[data-close]').onclick = () => d.close();
+  d.showModal();
 }
 
 /* The blob lives in this browser's IndexedDB. On a second browser there is

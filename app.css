@@ -629,6 +629,8 @@ body.gig-on{overflow:hidden}
 
 /* ── phones ─────────────────────────────────────────────── */
 @media(max-width:720px){
+  .res-embed{width:100%}
+  .res-go span{max-width:150px}
   .topbar{padding:8px 12px;gap:8px}
   .topbar .lbl{display:none}                    /* icon-only; aria-label carries the name */
   .brand span:last-child{display:none}          /* the logo alone — five buttons need the room */
@@ -686,7 +688,7 @@ body.gig-on{overflow:hidden}
      player, no buttons to add or open anything, no carets on the regions. */
   .topbar,.m-tools,.r-tools,.m-more,.r-more,.m-grip,.add-cell,.add-bar,.barline-btn,.barline-add,.add-section-row,
   .drawer,.viewer,.toast,.tip,.gig,.sheet-menu,
-  .track-bar,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
+  .track-bar,.res-bar,.r-caret,.micon,.m-icons,.skip-link,.pulse,.tap-btn{display:none!important}
   .r-mid{padding:0 8px}                       /* the caret is gone, so is its gutter */
   body{background:#fff;color:#000}
   .sheet{max-width:none;padding:0}
@@ -770,6 +772,51 @@ body.gig-on{overflow:hidden}
 .track-meta{font-family:var(--mono);font-size:11px}
 .track-audio{height:32px;flex:1;min-width:120px;max-width:420px}
 .track-btn{padding:6px 11px;font-size:12.5px}
+
+/* ── resources ─────────────────────────────── */
+/* Folded away by default. None of this is wanted with a plectrum in hand,
+   so it sits under the mp3 row and stays shut until it is asked for. Every
+   colour here is a token, so the dark theme needs no second copy. */
+.res-bar{margin:-8px 0 14px}
+.res-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid transparent;
+  background:transparent;color:var(--muted);border-radius:8px;padding:6px 10px;
+  font-size:12.5px;font-weight:600;letter-spacing:.02em;
+  transition:color var(--t),background var(--t),border-color var(--t)}
+.res-toggle:hover{color:var(--ink-2);background:var(--sunk);border-color:var(--line)}
+.res-toggle[aria-expanded="true"]{color:var(--ink-2)}
+.res-count{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent);
+  background:var(--accent-soft);border-radius:99px;padding:1px 7px}
+.res-panel{margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
+.res-group{display:flex;flex-direction:column;gap:9px}
+.res-h{margin:0;font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted)}
+.res-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.res-chip{display:inline-flex;align-items:stretch;border:1px solid var(--line-strong);
+  border-radius:9px;overflow:hidden;background:var(--sunk);max-width:100%}
+.res-go{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;
+  color:var(--ink);padding:8px 11px;font-size:12.5px;font-weight:550;min-height:40px;min-width:0}
+.res-go span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px}
+.res-go:hover{background:var(--accent-soft);color:var(--accent)}
+.res-kill{border:0;border-left:1px solid var(--line-strong);background:transparent;
+  color:var(--muted);width:36px;min-height:40px;display:grid;place-items:center}
+.res-kill:hover{background:var(--danger);color:#fff}
+.res-add{display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-strong);
+  background:transparent;color:var(--muted);border-radius:9px;padding:8px 13px;
+  font-size:12.5px;font-weight:500;min-height:40px;
+  transition:color var(--t),border-color var(--t),background var(--t)}
+.res-add:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.res-hint{margin:0;font-size:11.5px;color:var(--muted);line-height:1.45;max-width:62ch}
+.res-embed{width:min(860px,84vw);border:0;border-radius:10px;background:#000;display:block}
+.res-note{margin:0;font-size:12px;color:var(--muted);max-width:60ch;text-align:center;line-height:1.5}
+.dlg-note.res-ok{color:var(--ink-2)}
+/* These live here, not up in the main touch block: the .res- rules above are
+   later in the file than that block, so a min-height set up there loses on
+   order. Measured at 375px — 40px, not the 44 it claimed. */
+@media (hover:none),(pointer:coarse){
+  .res-go,.res-add,.res-toggle{min-height:44px}
+  .res-kill{min-height:44px;width:44px}
+}
 
 /* ── attach chooser ─────────────────────────────────────── */
 .choices{display:flex;flex-direction:column;gap:8px}

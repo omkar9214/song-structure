@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=20260926-6">
+<link rel="stylesheet" href="app.css?v=20260928-1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f5fb0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -67,6 +67,7 @@
   </section>
 
   <section class="track-bar" id="track-bar"></section>
+  <section class="res-bar" id="res-bar"></section>
 
   <section class="roadmap-wrap">
     <div class="roadmap-label">Roadmap</div>
@@ -282,6 +283,26 @@
   </div>
 </dialog>
 
+<!-- ── A link to a video or a recording ───────────── -->
+<dialog id="dlg-link" aria-labelledby="link-h">
+  <div class="dlg">
+    <h2 id="link-h">Add a link</h2>
+    <p class="dlg-note" id="link-who"></p>
+    <label class="field">
+      <span>Link</span>
+      <input id="link-url" type="url" inputmode="url" spellcheck="false" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="https://…">
+    </label>
+    <label class="field">
+      <span>Name it (optional)</span>
+      <input id="link-name" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" spellcheck="false" placeholder="e.g. the live version">
+    </label>
+    <menu class="dlg-actions">
+      <button type="button" value="cancel" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="link-save">Add link</button>
+    </menu>
+  </div>
+</dialog>
+
 <!-- ── Confirm ──────────────────────────────────────────────── -->
 <dialog id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
   <div class="dlg confirm">
@@ -397,10 +418,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=20260926-6"></script>
-<script src="icons.js?v=20260926-6"></script>
-<script src="db.js?v=20260926-6"></script>
-<script src="cloud.js?v=20260926-6"></script>
-<script src="app.js?v=20260926-6"></script>
+<script src="config.js?v=20260928-1"></script>
+<script src="icons.js?v=20260928-1"></script>
+<script src="db.js?v=20260928-1"></script>
+<script src="cloud.js?v=20260928-1"></script>
+<script src="app.js?v=20260928-1"></script>
 </body>
 </html>

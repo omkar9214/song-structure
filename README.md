@@ -275,13 +275,38 @@ real. And **the empty song made at boot is dropped the moment the library
 arrives**, so you land on a song instead of a blank page.
 
 "Empty" errs entirely towards keeping: a title, an artist, a key, a note, a
-region, an attachment, an mp3, or a tempo or time signature moved off the
+region, an attachment, an mp3, a link, or a tempo or time signature moved off the
 default all make a song worth keeping. A wrong "not empty" costs one stray
 row; a wrong "empty" would lose work.
 
 The ones already in the account are cleared up deliberately, never
 automatically: the Songs tab offers **Remove _n_ empty** when there are any,
 and the song you have open is always spared.
+
+## Resources
+
+Under the mp3 row, folded shut until you ask for it. It holds the things about a song
+that are not the chart.
+
+**Links** — paste a URL to a video or a recording. The service is named from the URL
+alone, with no network call, so pasting works offline even though playing will not.
+
+| Plays inside the app | Opens outside it |
+|---|---|
+| YouTube, Spotify, Apple Music, TIDAL, SoundCloud | Amazon Music, Bandcamp, Deezer, anything else |
+
+Amazon Music publishes no embed at all, and Bandcamp's player wants a numeric album id
+the public URL never shows — so those open out rather than pretending. The dialog says
+which of the two you are getting **before** you save, and says that Spotify and Apple
+Music hand you a preview unless that browser is signed in to them.
+
+A link is text, so it rides in the song row: it syncs and backs up with no upload and
+costs nothing in the offline audit. It is also the **one thing in the app that needs
+signal**, which is why no link appears in gig mode and why opening one with no signal
+says so instead of showing an empty frame.
+
+Whether the panel is open is a **per-device** preference, not part of the song — folding
+it must never restamp a song and push a sync.
 
 ## Sync (optional)
 
